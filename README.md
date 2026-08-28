@@ -88,7 +88,7 @@ To prevent network lockouts and state desynchronization, the following must be m
 ## Development Environment
 
 ### Nix Shell
-Activate the Nix developer shell to load project tools (Python, `uv`, `just`, `git`, `gh`):
+Activate the Nix developer shell to load project tools: Python, `uv`, `pulumi`, `just`, `git`, and `gh`. It also runs `uv sync` and activates the resulting `.venv`, so `pulumi_reolink`, `pulumi`, and `pyyaml` are immediately importable. [`example/`](example/) relies on this shell's environment rather than managing its own dependencies:
 ```bash
 nix-shell
 ```
