@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+import pulumi
+from pulumi import dynamic
 from reolink_aio.api import Host
 from reolink_aio.exceptions import ReolinkError
 
@@ -123,5 +126,144 @@ async def apply_setting(host: Host, channel: int, key: str, value: Any) -> None:
         raise UnsupportedSettingError(f"Could not apply setting '{key}': {exc}") from exc
 
 
-class ReolinkDevice:
-    pass
+# The provider connects to a single camera per resource; multi-channel NVRs
+# are out of scope for the initial implementation, so we always target the
+# NVR's own channel 0 (which is the camera itself for standalone devices).
+CHANNEL = 0
+
+
+async def _connect(host: str, port: int | None, username: str, password: str) -> Host:
+    client = Host(host, username, password, port=port)
+    await client.login()
+    return client
+
+
+async def _read_settings(client: Host, keys: list[str]) -> dict[str, Any]:
+    await client.get_states()
+    return {key: read_setting(client, CHANNEL, key) for key in keys}
+
+
+async def _apply_settings(client: Host, settings: dict[str, Any]) -> None:
+    for key, value in settings.items():
+        await apply_setting(client, CHANNEL, key, value)
+
+
+def _resource_id(props: dict[str, Any]) -> str:
+    return f"{props['host']}:{props.get('port') or 'default'}"
+
+
+class _ReolinkDeviceProvider(dynamic.ResourceProvider):
+    def create(self, props: dict[str, Any]) -> dynamic.CreateResult:
+        async def run() -> dict[str, Any]:
+            client = await _connect(
+                props["host"], props.get("port"), props["username"], props["password"]
+            )
+            try:
+                settings = props.get("settings") or {}
+                await _apply_settings(client, settings)
+                return await _read_settings(client, list(settings))
+            finally:
+                await client.logout()
+
+        current = asyncio.run(run())
+        outs = {**props, "settings": current}
+        return dynamic.CreateResult(id_=_resource_id(props), outs=outs)
+
+    def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> dynamic.DiffResult:
+        replaces = [key for key in ("host", "port", "username") if olds.get(key) != news.get(key)]
+        changed = (
+            bool(replaces)
+            or olds.get("password") != news.get("password")
+            or olds.get("settings") != news.get("settings")
+        )
+        return dynamic.DiffResult(changes=changed, replaces=replaces)
+
+    def update(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> dynamic.UpdateResult:
+        async def run() -> dict[str, Any]:
+            client = await _connect(
+                news["host"], news.get("port"), news["username"], news["password"]
+            )
+            try:
+                old_settings = olds.get("settings") or {}
+                new_settings = news.get("settings") or {}
+                changed_settings = {
+                    key: value
+                    for key, value in new_settings.items()
+                    if old_settings.get(key) != value
+                }
+                await _apply_settings(client, changed_settings)
+                return await _read_settings(client, list(new_settings))
+            finally:
+                await client.logout()
+
+        current = asyncio.run(run())
+        return dynamic.UpdateResult(outs={**news, "settings": current})
+
+    def read(self, id_: str, props: dict[str, Any]) -> dynamic.ReadResult:
+        async def run() -> dict[str, Any]:
+            client = await _connect(
+                props["host"], props.get("port"), props["username"], props["password"]
+            )
+            try:
+                return await _read_settings(client, list(props.get("settings") or {}))
+            finally:
+                await client.logout()
+
+        current = asyncio.run(run())
+        return dynamic.ReadResult(id_=id_, outs={**props, "settings": current})
+
+    def delete(self, _id: str, _props: dict[str, Any]) -> None:
+        # Removing the resource from IaC must never mutate the physical
+        # camera or reset its settings out-of-band changes remain intact.
+        return None
+
+
+class ReolinkDevice(dynamic.Resource):
+    """A Pulumi dynamic resource managing settings on a single Reolink camera or doorbell.
+
+    Connects to `host` over HTTP via `reolink-aio` to apply `settings` --
+    a dict of stable setting names (see `SETTING_ALIASES`) to desired
+    values. `create`/`update` apply changed settings; `read` (used by
+    `pulumi refresh`) re-queries the camera to support drift detection.
+    Removing the resource from your Pulumi program never mutates the
+    physical camera -- `delete` is a no-op.
+
+    Args:
+        name: The Pulumi resource name.
+        host: The camera's IP address or hostname.
+        username: Admin username to authenticate with.
+        password: Admin password; pass a secret Output (e.g. from
+            `pulumi.Config().require_secret(...)`) to keep it encrypted
+            in stack state.
+        settings: Desired setting values, keyed by stable alias name.
+        port: The HTTP/HTTPS port, if not the camera's default.
+        opts: Standard Pulumi `ResourceOptions`.
+    """
+
+    host: pulumi.Output[str]
+    port: pulumi.Output[int | None]
+    username: pulumi.Output[str]
+    password: pulumi.Output[str]
+    settings: pulumi.Output[dict[str, Any]]
+
+    def __init__(
+        self,
+        name: str,
+        host: pulumi.Input[str],
+        username: pulumi.Input[str],
+        password: pulumi.Input[str],
+        settings: pulumi.Input[dict[str, Any]] | None = None,
+        port: pulumi.Input[int] | None = None,
+        opts: pulumi.ResourceOptions | None = None,
+    ) -> None:
+        props: dict[str, Any] = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+            "settings": settings if settings is not None else {},
+        }
+        secret_opts = pulumi.ResourceOptions(additional_secret_outputs=["password"])
+        super().__init__(
+            _ReolinkDeviceProvider(), name, props, pulumi.ResourceOptions.merge(secret_opts, opts)
+        )
