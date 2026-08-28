@@ -84,3 +84,7 @@ def run_bootstrap(
 
 def main() -> None:
     run_bootstrap()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

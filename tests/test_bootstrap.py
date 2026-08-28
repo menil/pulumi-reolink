@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -129,3 +131,26 @@ def test_main_delegates_to_run_bootstrap(mock_run_bootstrap: MagicMock) -> None:
     main()
 
     mock_run_bootstrap.assert_called_once_with()
+
+
+def test_running_as_module_invokes_main_without_warning() -> None:
+    """Regression test for `python -m pulumi_reolink.bootstrap`.
+
+    It previously did nothing at all (no `if __name__ == "__main__"` guard)
+    and, once one was added the naive way, triggered runpy's sys.modules
+    collision RuntimeWarning (because pulumi_reolink/__init__.py used to
+    re-export bootstrap.main under the same name as the submodule). Feeding
+    empty stdin makes the first prompt raise EOFError immediately, proving
+    main() actually ran rather than silently exiting.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pulumi_reolink.bootstrap"],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert "RuntimeWarning" not in result.stderr
+    # EOFError in stderr is the signal that main() actually ran and reached
+    # the first input() prompt, rather than silently exiting like it used to.
+    assert "EOFError" in result.stderr
