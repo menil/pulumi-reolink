@@ -24,10 +24,12 @@ From your Pulumi project directory, run the interactive bootstrap CLI against ea
 python -m pulumi_reolink.bootstrap
 ```
 
-You'll be prompted for the camera's name, host/IP, admin username, admin password, and a secret config key. The tool connects once to query the camera's current settings, appends an entry to `cameras.yaml` in the current directory, and prints the command to store the password securely:
+You'll be prompted for the camera's host/IP, admin username, and admin password. It connects once to query the camera's current settings and its own configured name, then prompts for **Camera Name** with that name pre-filled — press Enter to accept it, or type a different one. The secret config key isn't prompted for; it's derived automatically from the name (e.g. `front-doorbell-password`).
+
+The tool appends an entry to `cameras.yaml` in the current directory and prints the command to store the password securely:
 
 ```bash
-pulumi config set --secret front-doorbell-password "YourSuperSecretPassword"
+pulumi config set --secret front-doorbell-password "<password>"
 ```
 
 The plaintext password is only held in memory long enough to connect and print that command — it is never written to `cameras.yaml` or to disk.
