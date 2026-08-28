@@ -97,17 +97,16 @@ To import existing cameras into IaC, we provide a CLI script (`pulumi_reolink/bo
    python -m pulumi_reolink.bootstrap
    ```
 2. The script prompts you for:
-   - **Camera Name:** (e.g., `front-doorbell`)
    - **Host/IP:** (e.g., `192.168.1.50`)
    - **Username:** (e.g., `admin`)
    - **Password:** (Used only to connect once; *never* stored in plaintext)
-   - **Secret Config Key:** (e.g., `front-doorbell-password`)
-3. The script connects to the camera, queries all current settings and capabilities via `reolink-aio`, and appends the configuration to `example/cameras.yaml` using the designated `password_key`.
-4. It outputs the exact command to encrypt the password locally in Pulumi:
+3. It connects, queries all current settings and capabilities via `reolink-aio`, and reads the camera's own configured name. It then prompts **Camera Name** with that name pre-filled as the default — press Enter to accept it, or type a different one. The secret config key isn't prompted for; it's derived automatically from the (possibly overridden) name, e.g. `front-doorbell-password`.
+4. The script appends the configuration to `example/cameras.yaml` using the derived `password_key`.
+5. It outputs the exact command to encrypt the password locally in Pulumi:
    ```bash
    pulumi config set --secret front-doorbell-password "<password>"
    ```
-5. At runtime, the `ReolinkDevice` resource resolves the actual password by calling `pulumi.Config().require_secret(password_key)`, which decrypts the value from the stack's encrypted configuration. The plaintext password is never written to disk or Pulumi state; only the ciphertext lives in `Pulumi.<stack>.yaml`.
+6. At runtime, the `ReolinkDevice` resource resolves the actual password by calling `pulumi.Config().require_secret(password_key)`, which decrypts the value from the stack's encrypted configuration. The plaintext password is never written to disk or Pulumi state; only the ciphertext lives in `Pulumi.<stack>.yaml`.
 
 ---
 

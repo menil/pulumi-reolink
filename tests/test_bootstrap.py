@@ -1,40 +1,78 @@
 import subprocess
 import sys
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
 
-from pulumi_reolink.bootstrap import append_camera, main, prompt_camera_details, run_bootstrap
+from pulumi_reolink.bootstrap import (
+    append_camera,
+    main,
+    prompt_camera_name,
+    prompt_connection_details,
+    run_bootstrap,
+    slugify_password_key,
+)
 
-PROMPT_ANSWERS = {
-    "Camera Name: ": "front-doorbell",
-    "Host/IP: ": "192.168.1.50",
-    "Username: ": "admin",
-    "Password: ": "hunter2",
-    "Secret Config Key: ": "front-doorbell-password",
-}
+CONNECTION_ANSWERS = ["192.168.1.50", "admin", "hunter2"]
 
 
-def _fake_input(answers: dict[str, str]) -> Any:
-    def input_fn(prompt: str) -> str:
-        return answers[prompt]
+def _fake_input(answers: list[str]) -> Callable[[str], str]:
+    it: Iterator[str] = iter(answers)
+
+    def input_fn(_prompt: str) -> str:
+        return next(it)
 
     return input_fn
 
 
-def test_prompt_camera_details_uses_injected_input_fn() -> None:
-    details = prompt_camera_details(_fake_input(PROMPT_ANSWERS))
+def test_prompt_connection_details_uses_injected_input_fn() -> None:
+    details = prompt_connection_details(_fake_input(CONNECTION_ANSWERS))
 
     assert details == {
-        "name": "front-doorbell",
         "host": "192.168.1.50",
         "username": "admin",
         "password": "hunter2",
-        "password_key": "front-doorbell-password",
     }
+
+
+def test_prompt_camera_name_accepts_typed_override() -> None:
+    name = prompt_camera_name("Front Doorbell", _fake_input(["Back Door"]))
+
+    assert name == "Back Door"
+
+
+def test_prompt_camera_name_falls_back_to_default_on_empty_input() -> None:
+    name = prompt_camera_name("Front Doorbell", _fake_input([""]))
+
+    assert name == "Front Doorbell"
+
+
+def test_prompt_camera_name_shows_default_in_prompt_text() -> None:
+    seen_prompts = []
+
+    def input_fn(prompt: str) -> str:
+        seen_prompts.append(prompt)
+        return ""
+
+    prompt_camera_name("Front Doorbell", input_fn)
+
+    assert seen_prompts == ["Camera Name [Front Doorbell]: "]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Front Doorbell", "front-doorbell-password"),
+        ("  Back Yard Cam  ", "back-yard-cam-password"),
+        ("Cam #1 (2nd Floor)", "cam-1-2nd-floor-password"),
+        ("!!!", "camera-password"),
+    ],
+)
+def test_slugify_password_key(name: str, expected: str) -> None:
+    assert slugify_password_key(name) == expected
 
 
 def test_append_camera_creates_file_when_missing(tmp_path: Path) -> None:
@@ -66,31 +104,38 @@ def test_append_camera_raises_clear_error_on_invalid_yaml(tmp_path: Path) -> Non
         append_camera(cameras_file, {"name": "cam-1"})
 
 
-@patch("pulumi_reolink.bootstrap.Host")
-def test_run_bootstrap_queries_settings_and_writes_camera(
-    mock_host_cls: MagicMock, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
     host = MagicMock()
     host.login = AsyncMock()
     host.logout = AsyncMock()
     host.get_states = AsyncMock()
+    host.camera_name.return_value = camera_name
     host.status_led_enabled.return_value = True
     host.ir_enabled.return_value = False
     host.push_enabled.return_value = True
     host.recording_enabled.return_value = True
     host.md_sensitivity.return_value = 30
     host.ptz_guard_enabled.return_value = False
+    return host
+
+
+@patch("pulumi_reolink.bootstrap.Host")
+def test_run_bootstrap_uses_fetched_camera_name_by_default(
+    mock_host_cls: MagicMock, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    host = _fake_host(camera_name="Front Doorbell")
     mock_host_cls.return_value = host
 
     cameras_file = tmp_path / "cameras.yaml"
-
-    entry = run_bootstrap(_fake_input(PROMPT_ANSWERS), cameras_file)
+    # host, username, password, then an empty camera-name answer (accept fetched default)
+    entry = run_bootstrap(_fake_input([*CONNECTION_ANSWERS, ""]), cameras_file)
 
     host.login.assert_awaited_once()
     host.get_states.assert_awaited_once()
+    host.camera_name.assert_called_once_with(0)
     host.logout.assert_awaited_once()
 
-    assert entry["name"] == "front-doorbell"
+    assert entry["name"] == "Front Doorbell"
     assert entry["password_key"] == "front-doorbell-password"
     assert "password" not in entry
     assert entry["settings"]["status_led"] is True
@@ -105,22 +150,28 @@ def test_run_bootstrap_queries_settings_and_writes_camera(
 
 
 @patch("pulumi_reolink.bootstrap.Host")
+def test_run_bootstrap_honors_typed_name_override(mock_host_cls: MagicMock, tmp_path: Path) -> None:
+    host = _fake_host(camera_name="Front Doorbell")
+    mock_host_cls.return_value = host
+
+    entry = run_bootstrap(
+        _fake_input([*CONNECTION_ANSWERS, "Back Door"]), tmp_path / "cameras.yaml"
+    )
+
+    assert entry["name"] == "Back Door"
+    assert entry["password_key"] == "back-door-password"
+
+
+@patch("pulumi_reolink.bootstrap.Host")
 def test_run_bootstrap_skips_unsupported_settings(mock_host_cls: MagicMock, tmp_path: Path) -> None:
     from reolink_aio.exceptions import NotSupportedError
 
-    host = MagicMock()
-    host.login = AsyncMock()
-    host.logout = AsyncMock()
-    host.get_states = AsyncMock()
+    host = _fake_host()
     host.status_led_enabled.side_effect = NotSupportedError("not on this model")
     host.ir_enabled.return_value = True
-    host.push_enabled.return_value = True
-    host.recording_enabled.return_value = True
-    host.md_sensitivity.return_value = 30
-    host.ptz_guard_enabled.return_value = False
     mock_host_cls.return_value = host
 
-    entry = run_bootstrap(_fake_input(PROMPT_ANSWERS), tmp_path / "cameras.yaml")
+    entry = run_bootstrap(_fake_input([*CONNECTION_ANSWERS, ""]), tmp_path / "cameras.yaml")
 
     assert "status_led" not in entry["settings"]
     assert entry["settings"]["ir_lights"] is True
