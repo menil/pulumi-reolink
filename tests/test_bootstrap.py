@@ -108,6 +108,7 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
     host = MagicMock()
     host.login = AsyncMock()
     host.logout = AsyncMock()
+    host.get_host_data = AsyncMock()
     host.get_states = AsyncMock()
     host.camera_name.return_value = camera_name
     host.status_led_enabled.return_value = True
@@ -131,6 +132,7 @@ def test_run_bootstrap_uses_fetched_camera_name_by_default(
     entry = run_bootstrap(_fake_input([*CONNECTION_ANSWERS, ""]), cameras_file)
 
     host.login.assert_awaited_once()
+    host.get_host_data.assert_awaited_once()
     host.get_states.assert_awaited_once()
     host.camera_name.assert_called_once_with(0)
     host.logout.assert_awaited_once()
@@ -175,6 +177,23 @@ def test_run_bootstrap_skips_unsupported_settings(mock_host_cls: MagicMock, tmp_
 
     assert "status_led" not in entry["settings"]
     assert entry["settings"]["ir_lights"] is True
+
+
+@patch("pulumi_reolink.bootstrap.Host")
+def test_run_bootstrap_skips_settings_that_raise_non_reolink_errors(
+    mock_host_cls: MagicMock, tmp_path: Path
+) -> None:
+    """Regression test for a real camera whose push_enabled() raised a raw
+    KeyError('scheduleEnable') instead of a ReolinkError -- bootstrap must
+    skip that setting like any other unsupported one, not crash entirely."""
+    host = _fake_host()
+    host.push_enabled.side_effect = KeyError("scheduleEnable")
+    mock_host_cls.return_value = host
+
+    entry = run_bootstrap(_fake_input([*CONNECTION_ANSWERS, ""]), tmp_path / "cameras.yaml")
+
+    assert "push_notifications" not in entry["settings"]
+    assert entry["settings"]["status_led"] is True
 
 
 @patch("pulumi_reolink.bootstrap.run_bootstrap")

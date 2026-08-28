@@ -100,30 +100,42 @@ def _resolve_alias(host: Host, key: str) -> SettingAlias:
 
 
 def read_setting(host: Host, channel: int, key: str) -> Any:
-    """Read the current value of `key` from an already-refreshed `host`."""
+    """Read the current value of `key` from an already-refreshed `host`.
+
+    Catches broadly, not just ReolinkError: some reolink-aio getters raise a
+    raw KeyError/AttributeError instead of a ReolinkError when a camera's
+    firmware omits a field their response-parsing code assumes is always
+    present (observed for push_enabled() on at least one real camera). Since
+    that failure means the same thing to a caller as an unsupported setting,
+    it's wrapped the same way rather than crashing the whole bootstrap/deploy.
+    """
     alias = _resolve_alias(host, key)
     try:
         return alias.get(host, channel)
-    except ReolinkError as exc:
+    except Exception as exc:
         raise UnsupportedSettingError(
-            f"Could not read setting '{key}' from the camera: {exc}"
+            f"Could not read setting '{key}' from the camera: {type(exc).__name__}: {exc}"
         ) from exc
 
 
 async def apply_setting(host: Host, channel: int, key: str, value: Any) -> None:
     """Apply `value` for `key` on `host`, raising UnsupportedSettingError on failure.
 
-    Reolink-aio's setters already validate model support and value shape
+    Reolink-aio's setters usually validate model support and value shape
     internally and raise a descriptive ReolinkError when a setting is
-    unsupported or invalid; that message is preserved and re-raised as an
+    unsupported or invalid, but not always -- some raise a raw KeyError or
+    similar for firmware-specific response shapes their parsing code doesn't
+    expect (see read_setting). Either way, the failure is wrapped as an
     UnsupportedSettingError so IaC deployments fail with a clear explanation
-    instead of silently no-opping.
+    instead of a raw traceback or a silent no-op.
     """
     alias = _resolve_alias(host, key)
     try:
         await alias.set(host, channel, value)
-    except ReolinkError as exc:
-        raise UnsupportedSettingError(f"Could not apply setting '{key}': {exc}") from exc
+    except Exception as exc:
+        raise UnsupportedSettingError(
+            f"Could not apply setting '{key}': {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 # The provider connects to a single camera per resource; multi-channel NVRs
@@ -135,6 +147,11 @@ CHANNEL = 0
 async def _connect(host: str, port: int | None, username: str, password: str) -> Host:
     client = Host(host, username, password, port=port)
     await client.login()
+    # Discovers the camera's channels and capabilities. Without this,
+    # get_states() has no channels to iterate and every setting getter
+    # silently falls back to its default (False/0) instead of the real
+    # value, and every setter rejects the channel as unrecognized.
+    await client.get_host_data()
     return client
 
 
