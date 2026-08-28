@@ -12,6 +12,14 @@ GETTER_CASES = {
     "recording": "recording_enabled",
     "motion_sensitivity": "md_sensitivity",
     "ptz_guard_enabled": "ptz_guard_enabled",
+    "ftp_recording": "ftp_enabled",
+    "email_notifications": "email_enabled",
+    "hdr": "HDR_state",
+    "daynight_mode": "daynight_state",
+    "audio_recording": "audio_record",
+    "privacy_mask": "privacy_mask_enabled",
+    "buzzer": "buzzer_enabled",
+    "speaker_volume": "volume",
 }
 
 
@@ -77,6 +85,33 @@ async def test_apply_setting_ptz_guard_uses_enable_keyword() -> None:
     await apply_setting(host, 1, "ptz_guard_enabled", True)
 
     host.set_ptz_guard.assert_awaited_once_with(1, enable=True)
+
+
+@pytest.mark.parametrize(
+    ("alias", "setter_attr", "value", "expected_kwargs"),
+    [
+        ("ftp_recording", "set_ftp", True, {}),
+        ("email_notifications", "set_email", False, {}),
+        ("hdr", "set_HDR", True, {}),
+        ("daynight_mode", "set_daynight", "Auto", {}),
+        ("audio_recording", "set_audio", True, {}),
+        ("privacy_mask", "set_privacy_mask", True, {}),
+        ("buzzer", "set_buzzer", False, {}),
+        ("speaker_volume", "set_volume", 50, {"volume": 50}),
+    ],
+)
+async def test_apply_setting_forwards_new_settings_correctly(
+    alias: str, setter_attr: str, value: object, expected_kwargs: dict[str, object]
+) -> None:
+    host = MagicMock()
+    setattr(host, setter_attr, AsyncMock())
+
+    await apply_setting(host, 1, alias, value)
+
+    if expected_kwargs:
+        getattr(host, setter_attr).assert_awaited_once_with(1, **expected_kwargs)
+    else:
+        getattr(host, setter_attr).assert_awaited_once_with(1, value)
 
 
 def test_read_setting_reflection_fallback_uses_bare_getter() -> None:
