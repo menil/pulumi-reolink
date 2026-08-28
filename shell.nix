@@ -11,6 +11,6 @@ pkgs.mkShell {
 
   shellHook = ''
     echo "❄️ Welcome to the pulumi-reolink shell!"
-    uv sync --quiet
+    uv sync
   '';
 }
