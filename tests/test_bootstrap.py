@@ -285,6 +285,24 @@ def test_run_bootstrap_shows_friendly_error_and_exits_on_connect_failure(
     assert not cameras_file.exists()
 
 
+def test_connect_timeout_leaves_room_for_protocol_fallback() -> None:
+    """Regression test: an earlier version set CONNECT_TIMEOUT (the outer
+    total-attempt budget) equal to REQUEST_TIMEOUT (the per-request bound
+    passed to Host()). reolink-aio's login() can sequentially try HTTPS:443,
+    then HTTP:80, then a separate Baichuan handshake when port/https aren't
+    specified -- with equal budgets, a slow-but-failing first attempt could
+    consume the entire outer budget, cancelling the whole connection before
+    a later attempt that would have succeeded ever ran. Confirmed against
+    real cameras: 2 of 3 reachable cameras failed to connect through this
+    tool (while the official Reolink app connected to all 3) until the
+    outer budget was widened. The outer budget must comfortably exceed a
+    single request's timeout, with room for multiple sequential attempts.
+    """
+    from pulumi_reolink.bootstrap import CONNECT_TIMEOUT, REQUEST_TIMEOUT
+
+    assert CONNECT_TIMEOUT >= REQUEST_TIMEOUT * 3
+
+
 @patch("pulumi_reolink.bootstrap.CONNECT_TIMEOUT", 0.05)
 @patch("pulumi_reolink.bootstrap.Host")
 def test_run_bootstrap_caps_total_connect_time_even_if_login_hangs(

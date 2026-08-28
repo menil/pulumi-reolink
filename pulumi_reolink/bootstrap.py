@@ -17,12 +17,23 @@ from .provider import CHANNEL, SETTING_ALIASES, UnsupportedSettingError, read_se
 DEFAULT_CAMERAS_FILE = Path("cameras.yaml")
 # reolink-aio defaults to a 30s *per-request* timeout, and when port/https
 # aren't specified (as here) login() probes HTTPS:443, then HTTP:80, then a
-# separate Baichuan protocol handshake -- each getting its own budget, so an
-# unreachable host can take 3x+ the configured timeout. Passing timeout=
-# bounds each individual request; wrapping the whole connect attempt in
-# asyncio.wait_for(..., timeout=CONNECT_TIMEOUT) is what actually caps the
-# total wait for an interactive prompt.
-CONNECT_TIMEOUT = 10
+# separate Baichuan protocol handshake -- sequentially, each getting its own
+# budget. REQUEST_TIMEOUT bounds each individual request (passed as
+# Host(timeout=...)). CONNECT_TIMEOUT is the *separate*, larger outer budget
+# for the whole attempt (used by asyncio.wait_for around the full connect),
+# and must comfortably exceed REQUEST_TIMEOUT -- a real camera that only
+# answers on the second protocol tried needs the first (failing) attempt to
+# finish *and still leave time* for the one that succeeds. Setting these to
+# the same value (an earlier version of this file did) means the first
+# attempt alone can consume the entire outer budget, cancelling the whole
+# connection before the fallback that would have worked ever runs -- this
+# was caught after real cameras that needed the HTTP or Baichuan fallback
+# started failing to connect even though they were reachable. An
+# unreachable host exhausting every fallback in sequence was measured at
+# ~33s with a 10s per-request timeout, so 40s comfortably covers that
+# worst case.
+REQUEST_TIMEOUT = 10
+CONNECT_TIMEOUT = 40
 
 
 def _prompt_password(prompt: str) -> str:
@@ -83,7 +94,7 @@ def slugify_password_key(name: str) -> str:
 
 
 async def _connect(host: str, username: str, password: str) -> Host:
-    client = Host(host, username, password, timeout=CONNECT_TIMEOUT)
+    client = Host(host, username, password, timeout=REQUEST_TIMEOUT)
     await client.login()
     try:
         # Discovers the camera's channels and capabilities. Without this,
