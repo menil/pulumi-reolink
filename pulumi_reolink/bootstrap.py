@@ -1,30 +1,64 @@
 from __future__ import annotations
 
 import asyncio
+import getpass
 import re
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pwinput  # type: ignore[import-untyped]
 import yaml  # type: ignore[import-untyped]
 from reolink_aio.api import Host
 
 from .provider import CHANNEL, SETTING_ALIASES, UnsupportedSettingError, read_setting
 
 DEFAULT_CAMERAS_FILE = Path("cameras.yaml")
+# reolink-aio defaults to a 30s *per-request* timeout, and when port/https
+# aren't specified (as here) login() probes HTTPS:443, then HTTP:80, then a
+# separate Baichuan protocol handshake -- each getting its own budget, so an
+# unreachable host can take 3x+ the configured timeout. Passing timeout=
+# bounds each individual request; wrapping the whole connect attempt in
+# asyncio.wait_for(..., timeout=CONNECT_TIMEOUT) is what actually caps the
+# total wait for an interactive prompt.
+CONNECT_TIMEOUT = 10
 
 
-def prompt_connection_details(input_fn: Callable[[str], str] = input) -> dict[str, str]:
-    """Collect host/username/password via `input_fn`, one prompt per field.
+def _prompt_password(prompt: str) -> str:
+    """Prompt for a password, masked with asterisks via pwinput.
 
-    Isolating the prompts behind an injectable `input_fn` (rather than
-    calling `input()` inline throughout the workflow) lets tests drive this
-    with parameterized fixtures instead of real stdin.
+    pwinput needs raw access to the terminal and only falls back to getpass
+    when sys.stdin has been reassigned to something else -- it does *not*
+    detect plain piped/non-tty stdin (e.g. shell redirection), where it
+    raises a raw termios error instead. Falling back to getpass (hidden, no
+    asterisks, but battle-tested against exactly this case) here keeps that
+    from crashing with a traceback.
+    """
+    try:
+        result: str = pwinput.pwinput(prompt)
+        return result
+    except Exception:
+        return getpass.getpass(prompt)
+
+
+def prompt_connection_details(
+    input_fn: Callable[[str], str] = input,
+    password_input_fn: Callable[[str], str] = _prompt_password,
+) -> dict[str, str]:
+    """Collect host/username/password, one prompt per field.
+
+    The password uses a separate injectable function (pwinput by default,
+    which masks input with asterisks) so it can stay hidden in real use
+    while still being testable with a plain fake in tests. Isolating all
+    prompts behind injectable functions (rather than calling input()/
+    pwinput() inline) lets tests drive this with parameterized fixtures
+    instead of real stdin.
     """
     return {
         "host": input_fn("Host/IP: "),
         "username": input_fn("Username: "),
-        "password": input_fn("Password: "),
+        "password": password_input_fn("Password: "),
     }
 
 
@@ -49,14 +83,21 @@ def slugify_password_key(name: str) -> str:
 
 
 async def _connect(host: str, username: str, password: str) -> Host:
-    client = Host(host, username, password)
+    client = Host(host, username, password, timeout=CONNECT_TIMEOUT)
     await client.login()
-    # Discovers the camera's channels and capabilities. Without this,
-    # get_states() has no channels to iterate and every setting getter
-    # silently falls back to its default (False/0) instead of the real
-    # value.
-    await client.get_host_data()
-    await client.get_states()
+    try:
+        # Discovers the camera's channels and capabilities. Without this,
+        # get_states() has no channels to iterate and every setting getter
+        # silently falls back to its default (False/0) instead of the real
+        # value.
+        await client.get_host_data()
+        await client.get_states()
+    except Exception:
+        # Don't leak a logged-in session on a failed post-login step --
+        # repeated failed bootstrap attempts could otherwise exhaust the
+        # camera's session limit.
+        await client.logout()
+        raise
     return client
 
 
@@ -96,11 +137,35 @@ async def _connect_and_gather(
 def run_bootstrap(
     input_fn: Callable[[str], str] = input,
     cameras_file: Path = DEFAULT_CAMERAS_FILE,
+    password_input_fn: Callable[[str], str] = _prompt_password,
 ) -> dict[str, Any]:
-    connection = prompt_connection_details(input_fn)
-    fetched_name, settings = asyncio.run(
-        _connect_and_gather(connection["host"], connection["username"], connection["password"])
-    )
+    connection = prompt_connection_details(input_fn, password_input_fn)
+
+    print(f"Connecting to {connection['host']}...")
+    try:
+        fetched_name, settings = asyncio.run(
+            asyncio.wait_for(
+                _connect_and_gather(
+                    connection["host"], connection["username"], connection["password"]
+                ),
+                timeout=CONNECT_TIMEOUT,
+            )
+        )
+    except Exception as exc:
+        print(f"\nCould not connect to {connection['host']}: {type(exc).__name__}: {exc}")
+        print("Check the host/IP, username, and password, then try again.")
+        sys.exit(1)
+
+    print(f"Connected. Camera reports its name as '{fetched_name}'.")
+    skipped = len(SETTING_ALIASES) - len(settings)
+    if skipped:
+        print(
+            f"Retrieved {len(settings)} setting(s); {skipped} not supported "
+            "by this camera and skipped."
+        )
+    else:
+        print(f"Retrieved {len(settings)} setting(s).")
+
     name = prompt_camera_name(fetched_name, input_fn)
     password_key = slugify_password_key(name)
 
@@ -111,7 +176,10 @@ def run_bootstrap(
         "password_key": password_key,
         "settings": settings,
     }
+    print(f"Saving configuration to {cameras_file}...")
     append_camera(cameras_file, entry)
+    print(f"Saved. '{name}' added to {cameras_file}.")
+
     print(
         "Run this to store the password securely "
         "(replace <password> with the one you just entered):"
