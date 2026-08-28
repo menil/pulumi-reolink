@@ -4,9 +4,9 @@
 default:
     @just --list
 
-# Format code and configuration files
-format:
-    uv run ruff format .
+# Format code and configuration files (pass --check to check without writing)
+format *ARGS:
+    uv run ruff format {{ ARGS }} .
 
 # Run code and markdown linting checks
 lint:
@@ -22,7 +22,7 @@ test:
 
 # Run all local checks (format, lint, type check, tests)
 validate:
-    uv run ruff format --check .
-    uv run ruff check .
-    uv run mypy .
-    uv run pytest --cov=pulumi_reolink --cov-fail-under=90
+    just format --check
+    just lint
+    just typecheck
+    just test
