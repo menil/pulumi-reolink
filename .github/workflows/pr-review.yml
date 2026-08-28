@@ -1,0 +1,34 @@
+name: Automated Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run PR Review Action
+        uses: menil/pr-code-review-action@main
+        with:
+          # Auto-selects anthropic (preferring the Claude Code subscription token over a
+          # billed API key when both are set) if either Anthropic secret is configured,
+          # otherwise falls back to OpenRouter.
+          provider: ${{ (secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_CODE_OAUTH_TOKEN) && 'anthropic' || 'openrouter' }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          openrouter_model: ${{ vars.OPENROUTER_MODEL || 'openrouter/free' }}
+          openrouter_base_url: ${{ vars.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1/chat/completions' }}
+          openrouter_max_tokens: ${{ vars.OPENROUTER_MAX_TOKENS || '4096' }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_model: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
+          anthropic_base_url: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1/messages' }}
+          anthropic_max_tokens: ${{ vars.ANTHROPIC_MAX_TOKENS || '8192' }}

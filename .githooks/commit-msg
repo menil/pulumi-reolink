@@ -1,0 +1,66 @@
+#!/bin/sh
+
+COMMIT_MSG_FILE="$1"
+
+# Verify that a commit message file is provided and exists
+if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ]; then
+  printf 'ERROR: Commit message file not found or not specified.\n' >&2
+  exit 1
+fi
+
+# Read the first line (title)
+IFS= read -r TITLE < "$COMMIT_MSG_FILE"
+
+# Reject empty commit messages
+if [ -z "$TITLE" ]; then
+  printf 'ERROR: Commit message cannot be empty.\n' >&2
+  exit 1
+fi
+
+# Allow git rebase autosquash commits (fixup!, squash!, amend!)
+case "$TITLE" in
+fixup!* | squash!* | amend!*)
+  exit 0
+  ;;
+esac
+
+# Conventional commit regex
+# Format: type(scope): subject  or  type: subject
+# Groups: (1) type, (2) optional scope, (3) optional breaking change (!)
+# Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+CONV_REGEX='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+'
+
+if ! printf '%s\n' "$TITLE" | grep -qE "$CONV_REGEX"; then
+  printf 'ERROR: Commit title must follow conventional commits format:\n' >&2
+  printf '  Got: "%s"\n' "$TITLE" >&2
+  printf '  Expected: type(scope): subject\n' >&2
+  printf '  Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n' >&2
+  exit 1
+fi
+
+# Title length validation
+TITLE_LEN=${#TITLE}
+if [ "$TITLE_LEN" -gt 72 ]; then
+  printf 'ERROR: Commit title must be 72 characters or less (%s)\n' "$TITLE_LEN" >&2
+  exit 1
+fi
+
+# Stream the file line-by-line starting at line 1
+LINE_NUM=1
+while IFS= read -r line || [ -n "$line" ]; do
+  # Ensure there is a blank line separating the title from the body
+  if [ "$LINE_NUM" -eq 2 ] && [ -n "$line" ]; then
+    printf 'ERROR: Conventional commits mandate a blank line after the title (line 2).\n' >&2
+    exit 1
+  fi
+
+  # Validate body lines (line 3 onwards)
+  if [ "$LINE_NUM" -ge 3 ]; then
+    LEN=${#line}
+    if [ "$LEN" -gt 72 ]; then
+      printf 'ERROR: Commit body line %s exceeds 72 characters (%s chars): "%s"\n' "$LINE_NUM" "$LEN" "$line" >&2
+      exit 1
+    fi
+  fi
+  LINE_NUM=$((LINE_NUM + 1))
+done < "$COMMIT_MSG_FILE"

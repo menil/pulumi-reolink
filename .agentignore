@@ -1,0 +1,44 @@
+# Canonical ignore-pattern list for AI coding agents.
+#
+# This is the single source of truth. Agent-specific ignore files
+# (.claudeignore, .antigravityignore, etc.) are symlinks to this file
+# so the pattern list never drifts between agents. Gitignore syntax.
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+out/
+.next/
+.nuxt/
+target/
+vendor/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+.npmrc
+.aws/credentials
+.docker/config.json
+.ssh/
+.kube/config
+.gem/credentials
+
+# Caches / logs
+.cache/
+*.log
+coverage/
+.turbo/
+.parcel-cache/
+
+# OS / editor cruft
+.DS_Store
+.idea/
