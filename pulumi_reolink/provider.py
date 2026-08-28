@@ -56,6 +56,38 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         get=lambda host, channel: host.ptz_guard_enabled(channel),
         set=lambda host, channel, value: host.set_ptz_guard(channel, enable=value),
     ),
+    "ftp_recording": SettingAlias(
+        get=lambda host, channel: host.ftp_enabled(channel),
+        set=lambda host, channel, value: host.set_ftp(channel, value),
+    ),
+    "email_notifications": SettingAlias(
+        get=lambda host, channel: host.email_enabled(channel),
+        set=lambda host, channel, value: host.set_email(channel, value),
+    ),
+    "hdr": SettingAlias(
+        get=lambda host, channel: host.HDR_state(channel),
+        set=lambda host, channel, value: host.set_HDR(channel, value),
+    ),
+    "daynight_mode": SettingAlias(
+        get=lambda host, channel: host.daynight_state(channel),
+        set=lambda host, channel, value: host.set_daynight(channel, value),
+    ),
+    "audio_recording": SettingAlias(
+        get=lambda host, channel: host.audio_record(channel),
+        set=lambda host, channel, value: host.set_audio(channel, value),
+    ),
+    "privacy_mask": SettingAlias(
+        get=lambda host, channel: host.privacy_mask_enabled(channel),
+        set=lambda host, channel, value: host.set_privacy_mask(channel, value),
+    ),
+    "buzzer": SettingAlias(
+        get=lambda host, channel: host.buzzer_enabled(channel),
+        set=lambda host, channel, value: host.set_buzzer(channel, value),
+    ),
+    "speaker_volume": SettingAlias(
+        get=lambda host, channel: host.volume(channel),
+        set=lambda host, channel, value: host.set_volume(channel, volume=value),
+    ),
 }
 
 

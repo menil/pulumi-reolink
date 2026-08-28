@@ -111,7 +111,22 @@ Nothing on the camera itself. `delete` is a no-op by design — removing a `Reol
 Run `pulumi refresh` to detect the drift, then `pulumi up` to re-apply your declared configuration.
 
 **Which settings can I manage?**
-A stable set of built-in names (`status_led`, `ir_lights`, `push_notifications`, `recording`, `motion_sensitivity`, `ptz_guard_enabled`), plus best-effort support for others via runtime reflection on the connected camera's API. An unknown or model-unsupported setting fails the deployment with a clear error rather than silently doing nothing.
+A stable set of built-in names, plus best-effort support for others via runtime reflection on the connected camera's API. An unknown or model-unsupported setting fails the deployment with a clear error rather than silently doing nothing. The built-in names:
+
+- `status_led`
+- `ir_lights`
+- `push_notifications`
+- `recording`
+- `motion_sensitivity`
+- `ptz_guard_enabled`
+- `ftp_recording`
+- `email_notifications`
+- `hdr`
+- `daynight_mode`
+- `audio_recording`
+- `privacy_mask`
+- `buzzer`
+- `speaker_volume`
 
 **Is this affiliated with or endorsed by Reolink?**
 No — this is an independent, community project built on Reolink's local HTTP API, not an official Reolink product.

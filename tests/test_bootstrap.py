@@ -143,6 +143,14 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
     host.recording_enabled.return_value = True
     host.md_sensitivity.return_value = 30
     host.ptz_guard_enabled.return_value = False
+    host.ftp_enabled.return_value = False
+    host.email_enabled.return_value = True
+    host.HDR_state.return_value = 1
+    host.daynight_state.return_value = "Auto"
+    host.audio_record.return_value = True
+    host.privacy_mask_enabled.return_value = False
+    host.buzzer_enabled.return_value = True
+    host.volume.return_value = 80
     return host
 
 
