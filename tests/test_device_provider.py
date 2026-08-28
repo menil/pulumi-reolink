@@ -18,6 +18,7 @@ def _fake_host() -> MagicMock:
     host = MagicMock()
     host.login = AsyncMock()
     host.logout = AsyncMock()
+    host.get_host_data = AsyncMock()
     host.get_states = AsyncMock()
     host.status_led_enabled.return_value = True
     host.set_status_led = AsyncMock()
@@ -43,6 +44,7 @@ def test_create_applies_settings_logs_in_and_out(mock_host_cls: MagicMock) -> No
     result = provider.create({**BASE_PROPS, "settings": {"status_led": False}})
 
     host.login.assert_awaited_once()
+    host.get_host_data.assert_awaited_once()
     host.set_status_led.assert_awaited_once_with(0, False)
     host.logout.assert_awaited_once()
     assert result.id == "10.0.0.5:default"

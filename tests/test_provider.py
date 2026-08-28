@@ -135,3 +135,24 @@ def test_read_setting_wraps_reolink_error() -> None:
 
     with pytest.raises(UnsupportedSettingError):
         read_setting(host, 0, "status_led")
+
+
+async def test_apply_setting_wraps_non_reolink_error() -> None:
+    """Regression test: some reolink-aio setters/getters raise a raw KeyError
+    or similar (not a ReolinkError) for firmware-specific response shapes
+    their parsing code doesn't expect -- observed for push_enabled() on a
+    real camera missing a 'scheduleEnable' field. That must still surface as
+    a clear UnsupportedSettingError, not an unhandled traceback."""
+    host = MagicMock()
+    host.set_status_led = AsyncMock(side_effect=KeyError("scheduleEnable"))
+
+    with pytest.raises(UnsupportedSettingError, match="KeyError"):
+        await apply_setting(host, 0, "status_led", True)
+
+
+def test_read_setting_wraps_non_reolink_error() -> None:
+    host = MagicMock()
+    host.status_led_enabled.side_effect = KeyError("scheduleEnable")
+
+    with pytest.raises(UnsupportedSettingError, match="KeyError"):
+        read_setting(host, 0, "status_led")

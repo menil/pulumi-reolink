@@ -51,6 +51,11 @@ def slugify_password_key(name: str) -> str:
 async def _connect(host: str, username: str, password: str) -> Host:
     client = Host(host, username, password)
     await client.login()
+    # Discovers the camera's channels and capabilities. Without this,
+    # get_states() has no channels to iterate and every setting getter
+    # silently falls back to its default (False/0) instead of the real
+    # value.
+    await client.get_host_data()
     await client.get_states()
     return client
 
