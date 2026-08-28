@@ -1,6 +1,6 @@
 # pulumi-reolink
 
-A reusable Pulumi package and CLI utility to configure and back up Reolink camera settings locally, without depending on Home Assistant. It connects directly to your cameras/doorbells over HTTP using [`reolink-aio`](https://github.com/starkillerOG/reolink-aio) — the same library that powers Home Assistant's official Reolink integration.
+Manage your Reolink camera and doorbell settings as Infrastructure as Code with Pulumi — declarative, versioned, and drift-corrected. It connects directly to your cameras/doorbells over HTTP using [`reolink-aio`](https://github.com/starkillerOG/reolink-aio) — the same library that powers Home Assistant's official Reolink integration.
 
 See [`specs/spec.md`](specs/spec.md) for the full technical specification.
 
@@ -85,6 +85,37 @@ To prevent network lockouts and state desynchronization, the following must be m
 
 ---
 
+## FAQ
+
+**Does this require Home Assistant?**
+No — it connects directly to your camera over its local HTTP API via `reolink-aio`, the same library Home Assistant's integration uses, but entirely standalone.
+
+**Why not use Pulumi's generic REST API provider?**
+Reolink's API is a single `POST /cgi-bin/api.cgi` RPC endpoint with stateful session-token authentication — a `Login` command returns a token that must be appended to every subsequent request, then a `Logout` command releases it — not RESTful resource paths. A generic REST provider has no way to model that session lifecycle, so this uses a custom Pulumi Dynamic Provider instead.
+
+**Does this support NVRs or multiple cameras behind one host?**
+Not yet. Each `ReolinkDevice` manages a single camera (channel 0); multi-channel NVR support is out of scope for now.
+
+**Does this work with battery-powered cameras (e.g. the Argus series)?**
+No — they sleep to conserve power and disable their local HTTP API while asleep, so there's nothing to connect to. Only plugged-in (PoE or DC-powered) cameras and doorbells are supported.
+
+**Can I change Wi-Fi settings or rotate the admin password through this?**
+No, deliberately. Both carry a real risk of locking the provider out of the device mid-deployment — manage them out-of-band via the Reolink app instead.
+
+**What happens if I remove a camera from my Pulumi program?**
+Nothing on the camera itself. `delete` is a no-op by design — removing a `ReolinkDevice` from your code stops Pulumi from managing it, but never mutates or resets the physical device.
+
+**What happens if a setting is changed outside Pulumi (e.g. via the Reolink app)?**
+Run `pulumi refresh` to detect the drift, then `pulumi up` to re-apply your declared configuration.
+
+**Which settings can I manage?**
+A stable set of built-in names (`status_led`, `ir_lights`, `push_notifications`, `recording`, `motion_sensitivity`, `ptz_guard_enabled`), plus best-effort support for others via runtime reflection on the connected camera's API. An unknown or model-unsupported setting fails the deployment with a clear error rather than silently doing nothing.
+
+**Is this affiliated with or endorsed by Reolink?**
+No — this is an independent, community project built on Reolink's local HTTP API, not an official Reolink product.
+
+---
+
 ## Development Environment
 
 ### Nix Shell
@@ -100,17 +131,3 @@ nix-shell
 - `just typecheck`: Type-check `pulumi_reolink` with `mypy`.
 - `just test`: Run the unit test suite with coverage enforcement (`pytest --cov-fail-under=90`).
 - `just validate`: Run the full pipeline (format check, lint, type check, tests).
-
-### Git Hook Checks
-The project automatically configures local Git hooks:
-- **`commit-msg`**: Validates that all commit titles adhere to the [Conventional Commits](https://www.conventionalcommits.org/) standard (e.g. `feat: add database support`).
-- **`pre-commit`**: Automatically runs `just validate` before allowing a commit. If any check fails, the commit is aborted.
-
-### AI Agent Ignore Files
-`.agentignore` at the repo root is the canonical, gitignore-syntax list of paths AI coding agents shouldn't read (dependencies, build output, secrets, caches, etc.). Agent-specific ignore files are symlinks to it, so the pattern list never drifts:
-
-- **Claude Code**: `.claudeignore` → `.agentignore`
-- **Google Antigravity**: `.antigravityignore` → `.agentignore`
-- **OpenCode**: has no native ignore-file support yet. The closest option is the community [`opencode-ignore`](https://github.com/lgladysz/opencode-ignore) plugin, which you install via `opencode.json` and which reads a `.ignore` file. If you adopt it, symlink `.ignore` to `.agentignore` the same way.
-
-To update the pattern list, edit `.agentignore` — the symlinked files pick up the change automatically.
