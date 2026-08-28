@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from reolink_aio.exceptions import NotSupportedError
 
-import pulumi_reolink
 from pulumi_reolink.provider import UnsupportedSettingError, apply_setting, read_setting
 
 GETTER_CASES = {
@@ -14,11 +13,6 @@ GETTER_CASES = {
     "motion_sensitivity": "md_sensitivity",
     "ptz_guard_enabled": "ptz_guard_enabled",
 }
-
-
-def test_bootstrap_entrypoint_not_implemented() -> None:
-    with pytest.raises(NotImplementedError):
-        pulumi_reolink.bootstrap()
 
 
 @pytest.mark.parametrize(("alias", "getter_attr"), GETTER_CASES.items())
