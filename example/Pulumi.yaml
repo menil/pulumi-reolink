@@ -1,3 +1,6 @@
 name: pulumi-reolink-example
-runtime: python
+runtime:
+  name: python
+  options:
+    virtualenv: venv
 description: Example Pulumi program that configures Reolink cameras via pulumi_reolink.ReolinkDevice.
