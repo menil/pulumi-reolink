@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pulumi-reolink"
+version = "0.1.0"
+description = "A reusable Pulumi package and CLI utility to configure and back up Reolink camera settings locally, without depending on Home Assistant."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Home Automation",
+    "Topic :: System :: Hardware",
+]
+dependencies = ["reolink-aio>=0.21.0", "pulumi>=3.100.0", "pyyaml>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/menil/pulumi-reolink"
+Repository = "https://github.com/menil/pulumi-reolink"
+
+[project.scripts]
+pulumi-reolink-bootstrap = "pulumi_reolink.bootstrap:main"
+
+[dependency-groups]
+dev = ["ruff>=0.6.0", "mypy>=1.11.0", "pytest>=8.0.0", "pytest-asyncio>=0.24.0", "pytest-cov>=5.0.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pulumi_reolink"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+exclude = ["^tests/", "^example/"]
+
+[[tool.mypy.overrides]]
+module = "reolink_aio.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["pulumi_reolink"]
+
+[tool.coverage.report]
+fail_under = 90
