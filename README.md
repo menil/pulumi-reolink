@@ -1,50 +1,105 @@
-# Project Template
+# pulumi-reolink
 
-A generic, modern project template pre-configured with developer tooling, Nix integration, local git hook validation, and automated AI code reviews.
+A reusable Pulumi package and CLI utility to configure and back up Reolink camera settings locally, without depending on Home Assistant. It connects directly to your cameras/doorbells over HTTP using [`reolink-aio`](https://github.com/starkillerOG/reolink-aio) — the same library that powers Home Assistant's official Reolink integration.
 
-## Features
+See [`specs/spec.md`](specs/spec.md) for the full technical specification.
 
-- 🤖 **Automated PR Reviews**: Integrated via `menil/pr-code-review-action` using OpenRouter (free tier by default).
-- ❄️ **Nix Shell**: Pre-configured `shell.nix` for consistent, reproducible developer environments.
-- 🛠️ **Local Task Runner (`Justfile`)**: Standardized commands for formatting, linting, and validating code.
-- 🛡️ **Git Hooks**: Pre-configured conventional commit title checks and automatic pre-commit quality checks.
-- ⚡ **Direnv Ready**: Automatically configures local git hooks upon entering the directory.
+---
+
+## Installation
+
+```bash
+pip install pulumi-reolink
+```
 
 ---
 
 ## Getting Started
 
-### 1. Create a Repository from this Template
+### 1. Bootstrap your existing cameras
 
-Click the **"Use this template"** button on GitHub, or create it via the GitHub CLI:
+From your Pulumi project directory, run the interactive bootstrap CLI against each camera you want to manage:
+
 ```bash
-gh repo create my-new-project --template menil/project-template --private --clone
+python -m pulumi_reolink.bootstrap
 ```
 
-### 2. Configure GitHub Secrets
+You'll be prompted for the camera's name, host/IP, admin username, admin password, and a secret config key. The tool connects once to query the camera's current settings, appends an entry to `cameras.yaml` in the current directory, and prints the command to store the password securely:
 
-For the automated PR code reviews to run successfully, navigate to your new repository's **Settings > Secrets and variables > Actions** and add:
+```bash
+pulumi config set --secret front-doorbell-password "YourSuperSecretPassword"
+```
 
-* **`OPENROUTER_API_KEY`**: Your OpenRouter API Key.
+The plaintext password is only held in memory long enough to connect and print that command — it is never written to `cameras.yaml` or to disk.
 
-*(Note: The template uses GitHub's Action Sharing to fetch `menil/pr-code-review-action` keylessly. Ensure you have configured the action repository under **Settings > Actions > General > Access** to be accessible from other repositories owned by your user account).*
+### 2. Load cameras in your Pulumi program
+
+```python
+import pulumi
+import yaml
+from pulumi_reolink import ReolinkDevice
+
+config = pulumi.Config()
+with open("cameras.yaml") as f:
+    cameras = yaml.safe_load(f)["cameras"]
+
+for camera in cameras:
+    ReolinkDevice(
+        camera["name"],
+        host=camera["host"],
+        username=camera["username"],
+        password=config.require_secret(camera["password_key"]),
+        settings=camera.get("settings", {}),
+    )
+```
+
+See [`example/`](example/) for a complete, runnable Pulumi project built this way.
+
+### 3. Preview and deploy
+
+```bash
+pulumi preview
+pulumi up
+```
+
+### 4. Detect and correct drift
+
+If a setting was changed out-of-band (e.g. via the Reolink phone/desktop app), refresh Pulumi's state and re-apply your desired configuration:
+
+```bash
+pulumi refresh
+pulumi up
+```
+
+---
+
+## Limitations & Out-of-Scope Configurations
+
+To prevent network lockouts and state desynchronization, the following must be managed out-of-band, not through this provider:
+
+* **Initial network onboarding** — join factory-reset/new cameras to your network and set their initial admin credentials with the official Reolink app first.
+* **Active network settings** — changing the Wi-Fi SSID, Wi-Fi password, or subnet configuration via Pulumi is not supported; it can drop the camera's connection mid-transaction.
+* **Admin password rotation** — rotate admin passwords out-of-band; a failed in-band rotation risks locking the provider out of the device.
+* **Firmware updates** — flashing firmware is a long-running, connectivity-disrupting operation and is not supported.
+* **Battery-powered cameras** (e.g. the Argus series) — these sleep to conserve power and disable their local HTTP API. Only plugged-in (PoE or DC-powered) cameras and doorbells are supported.
 
 ---
 
 ## Development Environment
 
 ### Nix Shell
-Activate the Nix developer shell to load project tools:
+Activate the Nix developer shell to load project tools (Python, `uv`, `just`, `git`, `gh`):
 ```bash
 nix-shell
 ```
 
 ### Task Runner (`Justfile`)
-The following tasks are available via `just`:
 - `just`: List all available tasks.
-- `just format`: Format code and configuration files.
-- `just lint`: Run code and markdown linters.
-- `just validate`: Execute all formatting, linting, and verification checks.
+- `just format`: Format code with `ruff format`.
+- `just lint`: Lint code with `ruff check`.
+- `just typecheck`: Type-check `pulumi_reolink` with `mypy`.
+- `just test`: Run the unit test suite with coverage enforcement (`pytest --cov-fail-under=90`).
+- `just validate`: Run the full pipeline (format check, lint, type check, tests).
 
 ### Git Hook Checks
 The project automatically configures local Git hooks:
