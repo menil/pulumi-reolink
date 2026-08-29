@@ -8,6 +8,11 @@ pkgs.mkShell {
     python311
     uv
     pulumi
+    # nixpkgs splits Pulumi's language plugins into separate packages
+    # instead of bundling them with `pulumi` like the official installer
+    # does -- without this, `pulumi preview`/`up` fail with "no language
+    # plugin 'pulumi-language-python' found".
+    pulumiPackages.pulumi-python
   ];
 
   shellHook = ''
