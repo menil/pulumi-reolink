@@ -3,7 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from reolink_aio.exceptions import NotSupportedError
 
-from pulumi_reolink.provider import UnsupportedSettingError, apply_setting, read_setting
+from pulumi_reolink.provider import (
+    CAPABILITY_BY_ALIAS,
+    UnsupportedSettingError,
+    apply_setting,
+    read_setting,
+)
 
 GETTER_CASES = {
     "status_led": "status_led_enabled",
@@ -31,6 +36,35 @@ def test_read_setting_known_alias_calls_getter(alias: str, getter_attr: str) -> 
     assert read_setting(host, 3, alias) == "sentinel"
 
     getattr(host, getter_attr).assert_called_once_with(3)
+
+
+@pytest.mark.parametrize(("alias", "capability"), CAPABILITY_BY_ALIAS.items())
+def test_read_setting_raises_unsupported_when_capability_not_reported(
+    alias: str, capability: str
+) -> None:
+    """Found on real hardware: HDR_state() returned a plausible value (0)
+    even though the camera model has no ISP HDR control at all, which
+    set_HDR() then rejected on `pulumi up` regardless of value. Checking
+    host.supported(channel, capability) up front -- the same check set_HDR()
+    itself uses, and the pattern Home Assistant's reolink integration uses
+    to decide whether to expose a control at all -- keeps an unsupported
+    setting from being read (and so captured by bootstrap) in the first
+    place."""
+    host = MagicMock()
+    host.supported.return_value = False
+
+    with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, alias)
+
+    host.supported.assert_called_once_with(0, capability)
+
+
+def test_read_setting_returns_value_when_capability_reported_supported() -> None:
+    host = MagicMock()
+    host.supported.return_value = True
+    host.status_led_enabled.return_value = True
+
+    assert read_setting(host, 0, "status_led") is True
 
 
 async def test_apply_setting_status_led_forwards_value_positionally() -> None:

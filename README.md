@@ -34,14 +34,12 @@ pulumi config set --secret front-doorbell-password "<password>"
 
 The plaintext password is only held in memory long enough to connect and print that command — it is never written to `cameras.yaml` or to disk.
 
-The entry is also written with `import: true`, since the settings above were just read live from the camera. That tells your Pulumi program to adopt the camera with Pulumi's `import_` resource option on its first `pulumi up`, instead of blindly re-applying every setting the way a normal `create` would. Remove that line from the camera's entry once that first `pulumi up` succeeds — leaving it in place afterwards isn't the intended use of `import_`.
-
 ### 2. Load cameras in your Pulumi program
 
 ```python
 import pulumi
 import yaml
-from pulumi_reolink import ReolinkDevice, import_opts
+from pulumi_reolink import ReolinkDevice
 
 config = pulumi.Config()
 with open("cameras.yaml") as f:
@@ -54,7 +52,6 @@ for camera in cameras:
         username=camera["username"],
         password=config.require_secret(camera["password_key"]),
         settings=camera.get("settings", {}),
-        opts=import_opts(camera),
     )
 ```
 

@@ -53,61 +53,145 @@ def _sentinel_guarded_getter(getter_name: str, sentinel: Any, label: str) -> Get
     return get
 
 
+def _capability_checked_getter(capability: str, getter: Getter) -> Getter:
+    """Wrap `getter` so it raises UnsupportedSettingError unless the camera
+    reports `capability` as supported.
+
+    Mirrors the check reolink-aio's own setters use internally (e.g.
+    set_HDR() checks host.supported(channel, "HDR") before doing anything
+    else) and the pattern Home Assistant's reolink integration uses to
+    decide whether to expose a control at all. Some getters (e.g.
+    HDR_state()) return a plausible-looking value even on a camera that
+    can't act on it -- found on a real camera whose HDR_state() returned 0
+    despite the model having no ISP HDR control, which bootstrap then
+    captured and set_HDR() rejected on `pulumi up` regardless of value.
+    Checking the same capability flag up front, before the getter runs,
+    keeps that from being captured in the first place.
+    """
+
+    def get(host: Host, channel: int) -> Any:
+        if not host.supported(channel, capability):
+            raise UnsupportedSettingError(
+                f"'{capability}' is not supported by this camera on channel {channel}."
+            )
+        return getter(host, channel)
+
+    return get
+
+
+# Single source of truth for each alias's reolink-aio capability key, cross-
+# checked against the installed reolink-aio source (both its HTTP-API and
+# Baichuan-protocol capability probes) rather than assumed -- also imported
+# by the test suite, so a capability string only ever needs updating here.
+CAPABILITY_BY_ALIAS: dict[str, str] = {
+    "status_led": "status_led",
+    "ir_lights": "ir_lights",
+    "push_notifications": "push",
+    "recording": "recording",
+    "motion_sensitivity": "md_sensitivity",
+    "ptz_guard_enabled": "ptz_guard",
+    "ftp_recording": "ftp",
+    "email_notifications": "email",
+    "hdr": "HDR",
+    "daynight_mode": "dayNight",
+    "audio_recording": "audio",
+    "privacy_mask": "privacy_mask",
+    "buzzer": "buzzer",
+    "speaker_volume": "volume",
+}
+
+
 SETTING_ALIASES: dict[str, SettingAlias] = {
     "status_led": SettingAlias(
-        get=lambda host, channel: host.status_led_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["status_led"],
+            lambda host, channel: host.status_led_enabled(channel),
+        ),
         set=lambda host, channel, value: host.set_status_led(channel, value),
     ),
     "ir_lights": SettingAlias(
-        get=lambda host, channel: host.ir_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ir_lights"], lambda host, channel: host.ir_enabled(channel)
+        ),
         set=lambda host, channel, value: host.set_ir_lights(channel, value),
     ),
     "push_notifications": SettingAlias(
-        get=lambda host, channel: host.push_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["push_notifications"],
+            lambda host, channel: host.push_enabled(channel),
+        ),
         set=lambda host, channel, value: host.set_push(channel, value),
     ),
     "recording": SettingAlias(
-        get=lambda host, channel: host.recording_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["recording"], lambda host, channel: host.recording_enabled(channel)
+        ),
         set=lambda host, channel, value: host.set_recording(channel, value),
     ),
     "motion_sensitivity": SettingAlias(
-        get=_sentinel_guarded_getter("md_sensitivity", 0, "Motion sensitivity"),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["motion_sensitivity"],
+            _sentinel_guarded_getter("md_sensitivity", 0, "Motion sensitivity"),
+        ),
         set=lambda host, channel, value: host.set_md_sensitivity(channel, value),
     ),
     "ptz_guard_enabled": SettingAlias(
-        get=lambda host, channel: host.ptz_guard_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ptz_guard_enabled"],
+            lambda host, channel: host.ptz_guard_enabled(channel),
+        ),
         set=lambda host, channel, value: host.set_ptz_guard(channel, enable=value),
     ),
     "ftp_recording": SettingAlias(
-        get=lambda host, channel: host.ftp_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ftp_recording"], lambda host, channel: host.ftp_enabled(channel)
+        ),
         set=lambda host, channel, value: host.set_ftp(channel, value),
     ),
     "email_notifications": SettingAlias(
-        get=lambda host, channel: host.email_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["email_notifications"],
+            lambda host, channel: host.email_enabled(channel),
+        ),
         set=lambda host, channel, value: host.set_email(channel, value),
     ),
     "hdr": SettingAlias(
-        get=_sentinel_guarded_getter("HDR_state", -1, "HDR"),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["hdr"], _sentinel_guarded_getter("HDR_state", -1, "HDR")
+        ),
         set=lambda host, channel, value: host.set_HDR(channel, value),
     ),
     "daynight_mode": SettingAlias(
-        get=_sentinel_guarded_getter("daynight_state", None, "Day/night mode"),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["daynight_mode"],
+            _sentinel_guarded_getter("daynight_state", None, "Day/night mode"),
+        ),
         set=lambda host, channel, value: host.set_daynight(channel, value),
     ),
     "audio_recording": SettingAlias(
-        get=lambda host, channel: host.audio_record(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["audio_recording"],
+            lambda host, channel: host.audio_record(channel),
+        ),
         set=lambda host, channel, value: host.set_audio(channel, value),
     ),
     "privacy_mask": SettingAlias(
-        get=lambda host, channel: host.privacy_mask_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["privacy_mask"],
+            lambda host, channel: host.privacy_mask_enabled(channel),
+        ),
         set=lambda host, channel, value: host.set_privacy_mask(channel, value),
     ),
     "buzzer": SettingAlias(
-        get=lambda host, channel: host.buzzer_enabled(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["buzzer"], lambda host, channel: host.buzzer_enabled(channel)
+        ),
         set=lambda host, channel, value: host.set_buzzer(channel, value),
     ),
     "speaker_volume": SettingAlias(
-        get=lambda host, channel: host.volume(channel),
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["speaker_volume"], lambda host, channel: host.volume(channel)
+        ),
         set=lambda host, channel, value: host.set_volume(channel, volume=value),
     ),
 }
@@ -231,24 +315,8 @@ async def _apply_settings(client: Host, settings: dict[str, Any]) -> None:
         await apply_setting(client, CHANNEL, key, value)
 
 
-def resource_id(host: str, port: int | None) -> str:
-    """Compute the stable Pulumi resource ID for a camera at `host`/`port`."""
-    return f"{host}:{port or 'default'}"
-
-
-def import_opts(camera: dict[str, Any]) -> pulumi.ResourceOptions | None:
-    """Build the `ResourceOptions` for a `cameras.yaml` entry.
-
-    A camera bootstrap just added is written with `import: true`, since the
-    settings it captured were read live from the device. Passing that
-    camera's resource ID as the `import_` option makes its first `pulumi up`
-    adopt it via a read+diff against the settings already declared, instead
-    of `create()` blindly re-applying every one of them. Returns None for a
-    camera without that flag, so it deploys normally.
-    """
-    if not camera.get("import"):
-        return None
-    return pulumi.ResourceOptions(import_=resource_id(camera["host"], camera.get("port")))
+def _resource_id(props: dict[str, Any]) -> str:
+    return f"{props['host']}:{props.get('port') or 'default'}"
 
 
 class _ReolinkDeviceProvider(dynamic.ResourceProvider):
@@ -266,7 +334,7 @@ class _ReolinkDeviceProvider(dynamic.ResourceProvider):
 
         current = asyncio.run(run())
         outs = {**props, "settings": current}
-        return dynamic.CreateResult(id_=resource_id(props["host"], props.get("port")), outs=outs)
+        return dynamic.CreateResult(id_=_resource_id(props), outs=outs)
 
     def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> dynamic.DiffResult:
         replaces = [key for key in ("host", "port", "username") if olds.get(key) != news.get(key)]

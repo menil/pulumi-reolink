@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pulumi
 from pulumi.runtime import mocks
 
-from pulumi_reolink.provider import ReolinkDevice, _ReolinkDeviceProvider, import_opts, resource_id
+from pulumi_reolink.provider import ReolinkDevice, _ReolinkDeviceProvider, _resource_id
 
 BASE_PROPS = {
     "host": "10.0.0.5",
@@ -28,28 +28,11 @@ def _fake_host() -> MagicMock:
 
 
 def test_resource_id_uses_host_and_port() -> None:
-    assert resource_id("10.0.0.5", 443) == "10.0.0.5:443"
+    assert _resource_id({"host": "10.0.0.5", "port": 443}) == "10.0.0.5:443"
 
 
 def test_resource_id_defaults_port_when_unset() -> None:
-    assert resource_id("10.0.0.5", None) == "10.0.0.5:default"
-
-
-def test_import_opts_builds_import_option_from_camera_marked_for_import() -> None:
-    camera = {"host": "10.0.0.5", "port": 443, "import": True}
-
-    opts = import_opts(camera)
-
-    assert opts is not None
-    assert opts.import_ == "10.0.0.5:443"
-
-
-def test_import_opts_returns_none_when_import_flag_absent() -> None:
-    assert import_opts({"host": "10.0.0.5"}) is None
-
-
-def test_import_opts_returns_none_when_import_flag_false() -> None:
-    assert import_opts({"host": "10.0.0.5", "import": False}) is None
+    assert _resource_id({"host": "10.0.0.5", "port": None}) == "10.0.0.5:default"
 
 
 @patch("pulumi_reolink.provider.Host")
