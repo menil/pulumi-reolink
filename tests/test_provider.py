@@ -185,6 +185,52 @@ async def test_apply_setting_wraps_non_reolink_error() -> None:
         await apply_setting(host, 0, "status_led", True)
 
 
+def _value_passed_to_setter(await_args: object) -> object:
+    """Extract the setting value from a mocked setter's recorded call,
+    regardless of whether the setter takes it positionally (e.g.
+    set_md_sensitivity(channel, value)) or as a keyword (e.g.
+    set_volume(channel, volume=value))."""
+    if await_args.kwargs:
+        return next(iter(await_args.kwargs.values()))
+    return await_args.args[-1]
+
+
+@pytest.mark.parametrize(
+    ("alias", "setter_attr"),
+    [
+        ("speaker_volume", "set_volume"),
+        ("motion_sensitivity", "set_md_sensitivity"),
+    ],
+)
+async def test_apply_setting_normalizes_whole_number_float_to_int(
+    alias: str, setter_attr: str
+) -> None:
+    """Found on real hardware: Pulumi's dynamic-provider RPC layer
+    serializes all numbers as protobuf doubles, so an int in cameras.yaml
+    (e.g. speaker_volume: 90) arrives here as 90.0, which set_volume()
+    rejects with "volume 90.0 not integer" since it strictly checks
+    isinstance(value, int)."""
+    host = MagicMock()
+    setattr(host, setter_attr, AsyncMock())
+
+    await apply_setting(host, 1, alias, 90.0)
+
+    passed_value = _value_passed_to_setter(getattr(host, setter_attr).await_args)
+    assert passed_value == 90
+    assert isinstance(passed_value, int)
+
+
+async def test_apply_setting_leaves_non_whole_float_unchanged() -> None:
+    """None of our current settings are legitimately fractional, but the
+    coercion must not corrupt a value that genuinely isn't a whole number."""
+    host = MagicMock()
+    host.set_volume = AsyncMock()
+
+    await apply_setting(host, 1, "speaker_volume", 90.5)
+
+    host.set_volume.assert_awaited_once_with(1, volume=90.5)
+
+
 def test_read_setting_wraps_non_reolink_error() -> None:
     host = MagicMock()
     host.status_led_enabled.side_effect = KeyError("scheduleEnable")
