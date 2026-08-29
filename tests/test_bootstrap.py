@@ -185,6 +185,7 @@ def test_run_bootstrap_uses_fetched_camera_name_by_default(
 
     assert entry["name"] == "Front Doorbell"
     assert entry["password_key"] == "front-doorbell-password"
+    assert entry["import"] is True
     assert "password" not in entry
     assert entry["settings"]["status_led"] is True
     assert entry["settings"]["ir_lights"] is False
@@ -195,6 +196,7 @@ def test_run_bootstrap_uses_fetched_camera_name_by_default(
     printed = capsys.readouterr().out
     assert 'pulumi config set --secret front-doorbell-password "<password>"' in printed
     assert "hunter2" not in printed
+    assert "'import: true'" in printed
 
 
 @patch("pulumi_reolink.bootstrap.Host")

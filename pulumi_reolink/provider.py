@@ -231,8 +231,24 @@ async def _apply_settings(client: Host, settings: dict[str, Any]) -> None:
         await apply_setting(client, CHANNEL, key, value)
 
 
-def _resource_id(props: dict[str, Any]) -> str:
-    return f"{props['host']}:{props.get('port') or 'default'}"
+def resource_id(host: str, port: int | None) -> str:
+    """Compute the stable Pulumi resource ID for a camera at `host`/`port`."""
+    return f"{host}:{port or 'default'}"
+
+
+def import_opts(camera: dict[str, Any]) -> pulumi.ResourceOptions | None:
+    """Build the `ResourceOptions` for a `cameras.yaml` entry.
+
+    A camera bootstrap just added is written with `import: true`, since the
+    settings it captured were read live from the device. Passing that
+    camera's resource ID as the `import_` option makes its first `pulumi up`
+    adopt it via a read+diff against the settings already declared, instead
+    of `create()` blindly re-applying every one of them. Returns None for a
+    camera without that flag, so it deploys normally.
+    """
+    if not camera.get("import"):
+        return None
+    return pulumi.ResourceOptions(import_=resource_id(camera["host"], camera.get("port")))
 
 
 class _ReolinkDeviceProvider(dynamic.ResourceProvider):
@@ -250,7 +266,7 @@ class _ReolinkDeviceProvider(dynamic.ResourceProvider):
 
         current = asyncio.run(run())
         outs = {**props, "settings": current}
-        return dynamic.CreateResult(id_=_resource_id(props), outs=outs)
+        return dynamic.CreateResult(id_=resource_id(props["host"], props.get("port")), outs=outs)
 
     def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> dynamic.DiffResult:
         replaces = [key for key in ("host", "port", "username") if olds.get(key) != news.get(key)]
