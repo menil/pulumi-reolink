@@ -4,7 +4,7 @@ from typing import Any
 import pulumi
 import yaml
 
-from pulumi_reolink import ReolinkDevice
+from pulumi_reolink import ReolinkDevice, import_opts
 
 CAMERAS_FILE = Path(__file__).parent / "cameras.yaml"
 REQUIRED_CAMERA_KEYS = ("name", "host", "username", "password_key")
@@ -38,6 +38,7 @@ def main() -> None:
             password=config.require_secret(camera["password_key"]),
             settings=camera.get("settings") or {},
             port=camera.get("port"),
+            opts=import_opts(camera),
         )
 
 
