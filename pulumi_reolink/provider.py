@@ -31,6 +31,28 @@ class SettingAlias:
     set: Setter
 
 
+def _sentinel_guarded_getter(getter_name: str, sentinel: Any, label: str) -> Getter:
+    """Build a getter that raises UnsupportedSettingError instead of
+    returning `sentinel`.
+
+    Some reolink-aio getters return a plausible-looking default (0, -1,
+    None, ...) instead of raising when a channel hasn't reported that
+    setting -- e.g. HDR_state() returns -1, which isn't a valid HDREnum
+    member, when re-applied via set_HDR() on a real camera that had never
+    reported ISP/HDR data. Treating the sentinel as unsupported, the same
+    as any other unsupported setting, keeps it from being captured by
+    bootstrap and later rejected by the setter.
+    """
+
+    def get(host: Host, channel: int) -> Any:
+        value = getattr(host, getter_name)(channel)
+        if value == sentinel:
+            raise UnsupportedSettingError(f"{label} is not available on channel {channel}.")
+        return value
+
+    return get
+
+
 SETTING_ALIASES: dict[str, SettingAlias] = {
     "status_led": SettingAlias(
         get=lambda host, channel: host.status_led_enabled(channel),
@@ -49,7 +71,7 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         set=lambda host, channel, value: host.set_recording(channel, value),
     ),
     "motion_sensitivity": SettingAlias(
-        get=lambda host, channel: host.md_sensitivity(channel),
+        get=_sentinel_guarded_getter("md_sensitivity", 0, "Motion sensitivity"),
         set=lambda host, channel, value: host.set_md_sensitivity(channel, value),
     ),
     "ptz_guard_enabled": SettingAlias(
@@ -65,11 +87,11 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         set=lambda host, channel, value: host.set_email(channel, value),
     ),
     "hdr": SettingAlias(
-        get=lambda host, channel: host.HDR_state(channel),
+        get=_sentinel_guarded_getter("HDR_state", -1, "HDR"),
         set=lambda host, channel, value: host.set_HDR(channel, value),
     ),
     "daynight_mode": SettingAlias(
-        get=lambda host, channel: host.daynight_state(channel),
+        get=_sentinel_guarded_getter("daynight_state", None, "Day/night mode"),
         set=lambda host, channel, value: host.set_daynight(channel, value),
     ),
     "audio_recording": SettingAlias(
@@ -144,6 +166,8 @@ def read_setting(host: Host, channel: int, key: str) -> Any:
     alias = _resolve_alias(host, key)
     try:
         return alias.get(host, channel)
+    except UnsupportedSettingError:
+        raise
     except Exception as exc:
         raise UnsupportedSettingError(
             f"Could not read setting '{key}' from the camera: {type(exc).__name__}: {exc}"
