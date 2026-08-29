@@ -185,6 +185,16 @@ async def apply_setting(host: Host, channel: int, key: str, value: Any) -> None:
     UnsupportedSettingError so IaC deployments fail with a clear explanation
     instead of a raw traceback or a silent no-op.
     """
+    # Pulumi's dynamic-provider RPC layer serializes all numeric property
+    # values as protobuf doubles, so an int input like `90` in cameras.yaml
+    # arrives here as the float `90.0`. Several reolink-aio setters
+    # validate `isinstance(value, int)` strictly and reject a float even
+    # when it's numerically whole (observed on a real camera: set_volume
+    # raising "volume 90.0 not integer"). Normalize a whole-number float
+    # back to int before handing it to the setter.
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+
     alias = _resolve_alias(host, key)
     try:
         await alias.set(host, channel, value)
