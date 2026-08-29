@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "A reusable Pulumi package and CLI utility to configure and back up Reolink camera settings locally, without depending on Home Assistant."
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 3 - Alpha",
