@@ -10,21 +10,36 @@ from pulumi_reolink.provider import (
     read_setting,
 )
 
+# push_notifications/recording/ftp_recording/email_notifications/buzzer are
+# queried device-wide (channel=None) rather than per-channel -- see
+# _device_level_getter's docstring -- so they need distinct expectations
+# from the rest of GETTER_CASES/CAPABILITY_BY_ALIAS below.
+DEVICE_LEVEL_ALIASES = {
+    "push_notifications",
+    "recording",
+    "ftp_recording",
+    "email_notifications",
+    "buzzer",
+}
+
 GETTER_CASES = {
     "status_led": "status_led_enabled",
     "ir_lights": "ir_enabled",
-    "push_notifications": "push_enabled",
-    "recording": "recording_enabled",
     "motion_sensitivity": "md_sensitivity",
     "ptz_guard_enabled": "ptz_guard_enabled",
-    "ftp_recording": "ftp_enabled",
-    "email_notifications": "email_enabled",
     "hdr": "HDR_state",
     "daynight_mode": "daynight_state",
     "audio_recording": "audio_record",
     "privacy_mask": "privacy_mask_enabled",
-    "buzzer": "buzzer_enabled",
     "speaker_volume": "volume",
+}
+
+DEVICE_LEVEL_GETTER_CASES = {
+    "push_notifications": "push_enabled",
+    "recording": "recording_enabled",
+    "ftp_recording": "ftp_enabled",
+    "email_notifications": "email_enabled",
+    "buzzer": "buzzer_enabled",
 }
 
 
@@ -38,7 +53,32 @@ def test_read_setting_known_alias_calls_getter(alias: str, getter_attr: str) -> 
     getattr(host, getter_attr).assert_called_once_with(3)
 
 
-@pytest.mark.parametrize(("alias", "capability"), CAPABILITY_BY_ALIAS.items())
+@pytest.mark.parametrize(("alias", "getter_attr"), DEVICE_LEVEL_GETTER_CASES.items())
+def test_read_setting_device_level_alias_calls_getter_with_none_channel(
+    alias: str, getter_attr: str
+) -> None:
+    """Found on real hardware: a standalone (non-NVR) camera's FTP upload
+    setting was visible and working in Home Assistant, but reported as
+    unsupported here, because we queried it per-channel (channel=0) instead
+    of device-wide (channel=None) -- reolink-aio treats these as genuinely
+    different flags (buzzer_enabled() checks "scheduleEnable" for an int
+    channel, the plain "enable" flag for None)."""
+    host = MagicMock()
+    getattr(host, getter_attr).return_value = "sentinel"
+
+    assert read_setting(host, 3, alias) == "sentinel"
+
+    getattr(host, getter_attr).assert_called_once_with(None)
+
+
+@pytest.mark.parametrize(
+    ("alias", "capability"),
+    [
+        (alias, cap)
+        for alias, cap in CAPABILITY_BY_ALIAS.items()
+        if alias not in DEVICE_LEVEL_ALIASES
+    ],
+)
 def test_read_setting_raises_unsupported_when_capability_not_reported(
     alias: str, capability: str
 ) -> None:
@@ -57,6 +97,22 @@ def test_read_setting_raises_unsupported_when_capability_not_reported(
         read_setting(host, 0, alias)
 
     host.supported.assert_called_once_with(0, capability)
+
+
+@pytest.mark.parametrize(
+    ("alias", "capability"),
+    [(alias, cap) for alias, cap in CAPABILITY_BY_ALIAS.items() if alias in DEVICE_LEVEL_ALIASES],
+)
+def test_read_setting_device_level_alias_raises_unsupported_when_capability_not_reported(
+    alias: str, capability: str
+) -> None:
+    host = MagicMock()
+    host.supported.return_value = False
+
+    with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, alias)
+
+    host.supported.assert_called_once_with(None, capability)
 
 
 def test_read_setting_returns_value_when_capability_reported_supported() -> None:
@@ -85,22 +141,22 @@ async def test_apply_setting_ir_lights_forwards_value_positionally() -> None:
     host.set_ir_lights.assert_awaited_once_with(1, True)
 
 
-async def test_apply_setting_push_notifications_forwards_value_positionally() -> None:
+async def test_apply_setting_push_notifications_forwards_value_with_none_channel() -> None:
     host = MagicMock()
     host.set_push = AsyncMock()
 
     await apply_setting(host, 1, "push_notifications", False)
 
-    host.set_push.assert_awaited_once_with(1, False)
+    host.set_push.assert_awaited_once_with(None, False)
 
 
-async def test_apply_setting_recording_forwards_value_positionally() -> None:
+async def test_apply_setting_recording_forwards_value_with_none_channel() -> None:
     host = MagicMock()
     host.set_recording = AsyncMock()
 
     await apply_setting(host, 1, "recording", True)
 
-    host.set_recording.assert_awaited_once_with(1, True)
+    host.set_recording.assert_awaited_once_with(None, True)
 
 
 async def test_apply_setting_motion_sensitivity_forwards_value_positionally() -> None:
@@ -124,13 +180,10 @@ async def test_apply_setting_ptz_guard_uses_enable_keyword() -> None:
 @pytest.mark.parametrize(
     ("alias", "setter_attr", "value", "expected_kwargs"),
     [
-        ("ftp_recording", "set_ftp", True, {}),
-        ("email_notifications", "set_email", False, {}),
         ("hdr", "set_HDR", True, {}),
         ("daynight_mode", "set_daynight", "Auto", {}),
         ("audio_recording", "set_audio", True, {}),
         ("privacy_mask", "set_privacy_mask", True, {}),
-        ("buzzer", "set_buzzer", False, {}),
         ("speaker_volume", "set_volume", 50, {"volume": 50}),
     ],
 )
@@ -146,6 +199,80 @@ async def test_apply_setting_forwards_new_settings_correctly(
         getattr(host, setter_attr).assert_awaited_once_with(1, **expected_kwargs)
     else:
         getattr(host, setter_attr).assert_awaited_once_with(1, value)
+
+
+@pytest.mark.parametrize(
+    ("alias", "setter_attr", "value"),
+    [
+        ("ftp_recording", "set_ftp", True),
+        ("email_notifications", "set_email", False),
+        ("buzzer", "set_buzzer", False),
+    ],
+)
+async def test_apply_setting_device_level_alias_forwards_value_with_none_channel(
+    alias: str, setter_attr: str, value: object
+) -> None:
+    host = MagicMock()
+    setattr(host, setter_attr, AsyncMock())
+
+    await apply_setting(host, 1, alias, value)
+
+    getattr(host, setter_attr).assert_awaited_once_with(None, value)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_animal_sensitivity", "dog_cat"),
+        ("ai_person_sensitivity", "people"),
+        ("baby_cry_sensitivity", "cry"),
+    ],
+)
+async def test_apply_setting_ai_sensitivity_forwards_value_and_ai_type(
+    alias: str, ai_type: str
+) -> None:
+    host = MagicMock()
+    host.set_ai_sensitivity = AsyncMock()
+
+    await apply_setting(host, 1, alias, 60)
+
+    host.set_ai_sensitivity.assert_awaited_once_with(1, 60, ai_type=ai_type)
+
+
+async def test_apply_setting_auto_tracking_uses_enable_keyword() -> None:
+    host = MagicMock()
+    host.set_auto_tracking = AsyncMock()
+
+    await apply_setting(host, 1, "auto_tracking", True)
+
+    host.set_auto_tracking.assert_awaited_once_with(1, enable=True)
+
+
+async def test_apply_setting_guard_return_time_uses_time_keyword() -> None:
+    host = MagicMock()
+    host.set_ptz_guard = AsyncMock()
+
+    await apply_setting(host, 1, "guard_return_time", 90)
+
+    host.set_ptz_guard.assert_awaited_once_with(1, time=90)
+
+
+async def test_apply_setting_privacy_mode_forwards_value_via_baichuan() -> None:
+    host = MagicMock()
+    host.baichuan.set_privacy_mode = AsyncMock()
+
+    await apply_setting(host, 1, "privacy_mode", True)
+
+    host.baichuan.set_privacy_mode.assert_awaited_once_with(1, enable=True)
+
+
+async def test_apply_setting_siren_on_event_forwards_value_positionally() -> None:
+    host = MagicMock()
+    host.set_audio_alarm = AsyncMock()
+
+    await apply_setting(host, 1, "siren_on_event", True)
+
+    host.set_audio_alarm.assert_awaited_once_with(1, True)
 
 
 def test_read_setting_reflection_fallback_uses_bare_getter() -> None:
@@ -295,6 +422,77 @@ def test_read_setting_treats_getter_sentinel_as_unsupported(
     # A real, in-range value must still pass through untouched.
     getattr(host, getter_attr).return_value = real_value
     assert read_setting(host, 0, alias) == real_value
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_animal_sensitivity", "dog_cat"),
+        ("ai_person_sensitivity", "people"),
+        ("baby_cry_sensitivity", "cry"),
+    ],
+)
+def test_read_setting_ai_sensitivity_calls_getter_with_ai_type(alias: str, ai_type: str) -> None:
+    host = MagicMock()
+    host.ai_sensitivity.return_value = 42
+
+    assert read_setting(host, 3, alias) == 42
+
+    host.ai_sensitivity.assert_called_once_with(3, ai_type)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_animal_sensitivity", "dog_cat"),
+        ("ai_person_sensitivity", "people"),
+        ("baby_cry_sensitivity", "cry"),
+    ],
+)
+def test_read_setting_ai_sensitivity_treats_zero_as_unsupported(alias: str, ai_type: str) -> None:
+    """ai_sensitivity() returns 0 -- a legitimate in-range value, not a
+    dedicated sentinel -- when the channel hasn't reported that ai_type's
+    settings yet, the same ambiguity motion_sensitivity already guards
+    against."""
+    host = MagicMock()
+    host.ai_sensitivity.return_value = 0
+
+    with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, alias)
+
+
+def test_read_setting_privacy_mode_calls_baichuan_getter() -> None:
+    host = MagicMock()
+    host.baichuan.privacy_mode.return_value = True
+
+    assert read_setting(host, 3, "privacy_mode") is True
+
+    host.baichuan.privacy_mode.assert_called_once_with(3)
+
+
+def test_read_setting_privacy_mode_treats_none_as_unsupported() -> None:
+    host = MagicMock()
+    host.baichuan.privacy_mode.return_value = None
+
+    with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, "privacy_mode")
+
+
+@pytest.mark.parametrize(
+    ("alias", "getter_attr"),
+    [
+        ("auto_tracking", "auto_track_enabled"),
+        ("guard_return_time", "ptz_guard_time"),
+        ("siren_on_event", "audio_alarm_enabled"),
+    ],
+)
+def test_read_setting_new_alias_calls_getter(alias: str, getter_attr: str) -> None:
+    host = MagicMock()
+    getattr(host, getter_attr).return_value = "sentinel"
+
+    assert read_setting(host, 3, alias) == "sentinel"
+
+    getattr(host, getter_attr).assert_called_once_with(3)
 
 
 def test_read_setting_does_not_double_wrap_unsupported_setting_error() -> None:
