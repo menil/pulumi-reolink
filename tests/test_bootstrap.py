@@ -151,6 +151,15 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
     host.privacy_mask_enabled.return_value = False
     host.buzzer_enabled.return_value = True
     host.volume.return_value = 80
+    host.ai_sensitivity.side_effect = lambda _channel, ai_type: {
+        "dog_cat": 35,
+        "people": 45,
+        "cry": 50,
+    }[ai_type]
+    host.auto_track_enabled.return_value = True
+    host.ptz_guard_time.return_value = 30
+    host.baichuan.privacy_mode.return_value = False
+    host.audio_alarm_enabled.return_value = False
     return host
 
 

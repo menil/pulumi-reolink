@@ -53,6 +53,72 @@ def _sentinel_guarded_getter(getter_name: str, sentinel: Any, label: str) -> Get
     return get
 
 
+def _device_level_getter(capability: str, getter_name: str) -> Getter:
+    """Build a getter for a setting that must be queried device-wide
+    (channel=None) rather than per-channel.
+
+    reolink-aio's push_enabled()/recording_enabled()/ftp_enabled()/
+    email_enabled()/buzzer_enabled() (and their setters) accept
+    `channel: int | None`, where an int channel checks a per-channel *NVR
+    scheduling* flag and `None` checks the plain device-level aggregate
+    flag instead -- confirmed via buzzer_enabled()'s source, which checks
+    `"scheduleEnable"` for an int channel but the plain `"enable"` flag for
+    `None`. Since this provider always targets a single standalone camera
+    (never an NVR), calling these with our usual per-resource channel
+    silently probes the wrong, NVR-only flag -- which is exactly what made
+    a real, working setting (e.g. FTP upload, visible and working in Home
+    Assistant) report as unsupported here. Home Assistant itself branches
+    on `is_nvr`/`is_hub` to pick between the two; since we're standalone
+    only, we always use `None`.
+    """
+
+    def get(host: Host, _channel: int) -> Any:
+        if not host.supported(None, capability):
+            raise UnsupportedSettingError(f"'{capability}' is not supported by this camera.")
+        return getattr(host, getter_name)(None)
+
+    return get
+
+
+def _privacy_mode_getter(host: Host, channel: int) -> Any:
+    # baichuan.privacy_mode() returns None when the channel hasn't reported
+    # a value yet, the same "plausible but not real" ambiguity HDR/day-night
+    # already guard against -- writing None into cameras.yaml would later
+    # break set_privacy_mode(channel, enable=None).
+    value = host.baichuan.privacy_mode(channel)
+    if value is None:
+        raise UnsupportedSettingError(
+            f"Privacy mode has not been reported by this camera on channel {channel}."
+        )
+    return value
+
+
+def _ai_sensitivity_getter(ai_type: str) -> Getter:
+    """Build a getter for one AI detection type's sensitivity.
+
+    ai_sensitivity(channel, ai_type) returns 0 -- a legitimate in-range
+    value, not a dedicated sentinel -- when the channel hasn't reported
+    that ai_type's settings yet, the same ambiguity motion_sensitivity
+    already handles via `_sentinel_guarded_getter`; done manually here
+    since this getter takes an extra `ai_type` argument that helper
+    doesn't support.
+    """
+
+    # `get` closes over `ai_type` so each of the three AI-sensitivity
+    # SETTING_ALIASES entries (animal/person/cry) gets its own getter from
+    # this one factory, without needing three near-identical functions.
+    def get(host: Host, channel: int) -> Any:
+        value = host.ai_sensitivity(channel, ai_type)
+        if value == 0:
+            raise UnsupportedSettingError(
+                f"AI '{ai_type}' sensitivity has not been reported by this camera "
+                f"on channel {channel}."
+            )
+        return value
+
+    return get
+
+
 def _capability_checked_getter(capability: str, getter: Getter) -> Getter:
     """Wrap `getter` so it raises UnsupportedSettingError unless the camera
     reports `capability` as supported.
@@ -98,6 +164,13 @@ CAPABILITY_BY_ALIAS: dict[str, str] = {
     "privacy_mask": "privacy_mask",
     "buzzer": "buzzer",
     "speaker_volume": "volume",
+    "ai_animal_sensitivity": "ai_dog_cat",
+    "ai_person_sensitivity": "ai_people",
+    "baby_cry_sensitivity": "ai_cry",
+    "auto_tracking": "auto_track",
+    "guard_return_time": "ptz_guard",
+    "privacy_mode": "privacy_mode",
+    "siren_on_event": "siren",
 }
 
 
@@ -116,17 +189,12 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         set=lambda host, channel, value: host.set_ir_lights(channel, value),
     ),
     "push_notifications": SettingAlias(
-        get=_capability_checked_getter(
-            CAPABILITY_BY_ALIAS["push_notifications"],
-            lambda host, channel: host.push_enabled(channel),
-        ),
-        set=lambda host, channel, value: host.set_push(channel, value),
+        get=_device_level_getter(CAPABILITY_BY_ALIAS["push_notifications"], "push_enabled"),
+        set=lambda host, channel, value: host.set_push(None, value),
     ),
     "recording": SettingAlias(
-        get=_capability_checked_getter(
-            CAPABILITY_BY_ALIAS["recording"], lambda host, channel: host.recording_enabled(channel)
-        ),
-        set=lambda host, channel, value: host.set_recording(channel, value),
+        get=_device_level_getter(CAPABILITY_BY_ALIAS["recording"], "recording_enabled"),
+        set=lambda host, channel, value: host.set_recording(None, value),
     ),
     "motion_sensitivity": SettingAlias(
         get=_capability_checked_getter(
@@ -143,17 +211,12 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         set=lambda host, channel, value: host.set_ptz_guard(channel, enable=value),
     ),
     "ftp_recording": SettingAlias(
-        get=_capability_checked_getter(
-            CAPABILITY_BY_ALIAS["ftp_recording"], lambda host, channel: host.ftp_enabled(channel)
-        ),
-        set=lambda host, channel, value: host.set_ftp(channel, value),
+        get=_device_level_getter(CAPABILITY_BY_ALIAS["ftp_recording"], "ftp_enabled"),
+        set=lambda host, channel, value: host.set_ftp(None, value),
     ),
     "email_notifications": SettingAlias(
-        get=_capability_checked_getter(
-            CAPABILITY_BY_ALIAS["email_notifications"],
-            lambda host, channel: host.email_enabled(channel),
-        ),
-        set=lambda host, channel, value: host.set_email(channel, value),
+        get=_device_level_getter(CAPABILITY_BY_ALIAS["email_notifications"], "email_enabled"),
+        set=lambda host, channel, value: host.set_email(None, value),
     ),
     "hdr": SettingAlias(
         get=_capability_checked_getter(
@@ -183,16 +246,57 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
         set=lambda host, channel, value: host.set_privacy_mask(channel, value),
     ),
     "buzzer": SettingAlias(
-        get=_capability_checked_getter(
-            CAPABILITY_BY_ALIAS["buzzer"], lambda host, channel: host.buzzer_enabled(channel)
-        ),
-        set=lambda host, channel, value: host.set_buzzer(channel, value),
+        get=_device_level_getter(CAPABILITY_BY_ALIAS["buzzer"], "buzzer_enabled"),
+        set=lambda host, channel, value: host.set_buzzer(None, value),
     ),
     "speaker_volume": SettingAlias(
         get=_capability_checked_getter(
             CAPABILITY_BY_ALIAS["speaker_volume"], lambda host, channel: host.volume(channel)
         ),
         set=lambda host, channel, value: host.set_volume(channel, volume=value),
+    ),
+    "ai_animal_sensitivity": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_animal_sensitivity"], _ai_sensitivity_getter("dog_cat")
+        ),
+        set=lambda host, channel, value: host.set_ai_sensitivity(channel, value, ai_type="dog_cat"),
+    ),
+    "ai_person_sensitivity": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_person_sensitivity"], _ai_sensitivity_getter("people")
+        ),
+        set=lambda host, channel, value: host.set_ai_sensitivity(channel, value, ai_type="people"),
+    ),
+    "baby_cry_sensitivity": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["baby_cry_sensitivity"], _ai_sensitivity_getter("cry")
+        ),
+        set=lambda host, channel, value: host.set_ai_sensitivity(channel, value, ai_type="cry"),
+    ),
+    "auto_tracking": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["auto_tracking"],
+            lambda host, channel: host.auto_track_enabled(channel),
+        ),
+        set=lambda host, channel, value: host.set_auto_tracking(channel, enable=value),
+    ),
+    "guard_return_time": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["guard_return_time"],
+            lambda host, channel: host.ptz_guard_time(channel),
+        ),
+        set=lambda host, channel, value: host.set_ptz_guard(channel, time=value),
+    ),
+    "privacy_mode": SettingAlias(
+        get=_capability_checked_getter(CAPABILITY_BY_ALIAS["privacy_mode"], _privacy_mode_getter),
+        set=lambda host, channel, value: host.baichuan.set_privacy_mode(channel, enable=value),
+    ),
+    "siren_on_event": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["siren_on_event"],
+            lambda host, channel: host.audio_alarm_enabled(channel),
+        ),
+        set=lambda host, channel, value: host.set_audio_alarm(channel, value),
     ),
 }
 

@@ -127,6 +127,13 @@ A stable set of built-in names, plus best-effort support for others via runtime 
 - `privacy_mask`
 - `buzzer`
 - `speaker_volume`
+- `ai_animal_sensitivity`
+- `ai_person_sensitivity`
+- `baby_cry_sensitivity`
+- `auto_tracking`
+- `guard_return_time`
+- `privacy_mode`
+- `siren_on_event`
 
 **Is this affiliated with or endorsed by Reolink?**
 No — this is an independent, community project built on Reolink's local HTTP API, not an official Reolink product.
