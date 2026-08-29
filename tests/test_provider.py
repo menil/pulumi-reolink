@@ -191,3 +191,37 @@ def test_read_setting_wraps_non_reolink_error() -> None:
 
     with pytest.raises(UnsupportedSettingError, match="KeyError"):
         read_setting(host, 0, "status_led")
+
+
+@pytest.mark.parametrize(
+    ("alias", "getter_attr", "sentinel", "real_value"),
+    [
+        ("motion_sensitivity", "md_sensitivity", 0, 25),
+        ("hdr", "HDR_state", -1, 2),
+        ("daynight_mode", "daynight_state", None, "Auto"),
+    ],
+)
+def test_read_setting_treats_getter_sentinel_as_unsupported(
+    alias: str, getter_attr: str, sentinel: object, real_value: object
+) -> None:
+    """Found on real hardware: HDR_state() returned -1, later rejected by
+    set_HDR()'s validation on `pulumi up`."""
+    host = MagicMock()
+    getattr(host, getter_attr).return_value = sentinel
+
+    with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, alias)
+
+    # A real, in-range value must still pass through untouched.
+    getattr(host, getter_attr).return_value = real_value
+    assert read_setting(host, 0, alias) == real_value
+
+
+def test_read_setting_does_not_double_wrap_unsupported_setting_error() -> None:
+    host = MagicMock()
+    host.HDR_state.return_value = -1
+
+    with pytest.raises(UnsupportedSettingError) as exc_info:
+        read_setting(host, 0, "hdr")
+
+    assert "Could not read setting" not in str(exc_info.value)
