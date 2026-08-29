@@ -185,7 +185,6 @@ def test_run_bootstrap_uses_fetched_camera_name_by_default(
 
     assert entry["name"] == "Front Doorbell"
     assert entry["password_key"] == "front-doorbell-password"
-    assert entry["import"] is True
     assert "password" not in entry
     assert entry["settings"]["status_led"] is True
     assert entry["settings"]["ir_lights"] is False
@@ -196,7 +195,6 @@ def test_run_bootstrap_uses_fetched_camera_name_by_default(
     printed = capsys.readouterr().out
     assert 'pulumi config set --secret front-doorbell-password "<password>"' in printed
     assert "hunter2" not in printed
-    assert "'import: true'" in printed
 
 
 @patch("pulumi_reolink.bootstrap.Host")
@@ -252,6 +250,25 @@ def test_run_bootstrap_reports_skipped_settings_count(
 
     printed = capsys.readouterr().out
     assert "1 not supported by this camera and skipped" in printed
+
+
+@patch("pulumi_reolink.bootstrap.Host")
+def test_run_bootstrap_skips_settings_the_camera_cannot_write_even_if_readable(
+    mock_host_cls: MagicMock, tmp_path: Path
+) -> None:
+    """Regression test for a real camera (Living Room) whose HDR_state()
+    returned a plausible value (0) even though the model has no ISP HDR
+    control at all -- set_HDR() rejected it on `pulumi up` regardless of
+    value, since the model just doesn't support HDR. host.supported() is
+    the same capability check set_HDR() uses internally; checking it before
+    the getter runs keeps bootstrap from capturing the setting at all."""
+    host = _fake_host()
+    host.supported.side_effect = lambda _channel, capability: capability != "HDR"
+
+    entry = _run(mock_host_cls, host, tmp_path / "cameras.yaml")
+
+    assert "hdr" not in entry["settings"]
+    assert entry["settings"]["status_led"] is True
 
 
 @patch("pulumi_reolink.bootstrap.Host")

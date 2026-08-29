@@ -174,8 +174,6 @@ def run_bootstrap(
         "host": connection["host"],
         "username": connection["username"],
         "password_key": password_key,
-        # See the print() below for why this is set on a fresh entry.
-        "import": True,
         "settings": settings,
     }
     print(f"Saving configuration to {cameras_file}...")
@@ -187,10 +185,6 @@ def run_bootstrap(
         "(replace <password> with the one you just entered):"
     )
     print(f'  pulumi config set --secret {password_key} "<password>"')
-    print(
-        f"Run 'pulumi up' now to adopt '{name}' with its current settings, "
-        f"then remove 'import: true' from its entry in {cameras_file}."
-    )
     return entry
 
 
