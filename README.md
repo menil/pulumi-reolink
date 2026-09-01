@@ -1,5 +1,10 @@
 # pulumi-reolink
 
+[![CI](https://github.com/menil/pulumi-reolink/actions/workflows/ci.yml/badge.svg)](https://github.com/menil/pulumi-reolink/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/pulumi-reolink)](https://pypi.org/project/pulumi-reolink/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pulumi-reolink)](https://pypi.org/project/pulumi-reolink/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Manage your Reolink camera and doorbell settings as Infrastructure as Code with Pulumi — declarative, versioned, and drift-corrected. It connects directly to your cameras/doorbells over HTTP using [`reolink-aio`](https://github.com/starkillerOG/reolink-aio) — the same library that powers Home Assistant's official Reolink integration.
 
 See [`specs/spec.md`](specs/spec.md) for the full technical specification.
@@ -106,6 +111,8 @@ No, deliberately. Both carry a real risk of locking the provider out of the devi
 
 **What happens if I remove a camera from my Pulumi program?**
 Nothing on the camera itself. `delete` is a no-op by design — removing a `ReolinkDevice` from your code stops Pulumi from managing it, but never mutates or resets the physical device.
+
+The same applies at the individual setting level: removing a key from a `ReolinkDevice`'s `settings` dict (while keeping the resource itself) stops Pulumi from managing that one setting, but leaves its last-applied value in place on the camera rather than reverting it to any prior state.
 
 **What happens if a setting is changed outside Pulumi (e.g. via the Reolink app)?**
 Run `pulumi refresh` to detect the drift, then `pulumi up` to re-apply your declared configuration.
