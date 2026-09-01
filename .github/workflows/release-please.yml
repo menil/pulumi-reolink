@@ -11,9 +11,57 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       # release-please-config.json intentionally omits bump-patch-for-minor-pre-major:
       # that flag demotes feat: commits to patch bumps while pre-1.0, which is the
       # opposite of what we want. bump-minor-pre-major alone still caps breaking
       # changes at a minor bump instead of jumping straight to 1.0.0.
+      #
+      # That same config's uv.lock extra-files entry assumes uv.lock keeps its
+      # current TOML shape: a [[package]] array of tables, each with a `name` and
+      # sibling `version` field. If a future uv release changes that lockfile
+      # format, the jsonpath `$.package[?(@.name=='pulumi-reolink')].version` will
+      # stop matching -- release-please only logs a warning and leaves uv.lock
+      # unmodified in that case, it does not fail the step. The first visible
+      # symptom would be the next release's CI failing on `uv sync --locked`
+      # (the same failure this extra-files entry was added to prevent), which is
+      # the signal to come back and update this jsonpath.
       - uses: googleapis/release-please-action@v5.0.0
+        id: release
+
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pulumi-reolink
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # release-please-action creates the GitHub Release using the workflow's own
+      # GITHUB_TOKEN. GitHub's anti-recursion rule means events triggered by that
+      # token (including this release) never fire publish.yml's `release: published`
+      # trigger, so publishing happens directly here instead, in the same run.
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          packages-dir: dist
