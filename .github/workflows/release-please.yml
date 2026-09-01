@@ -22,12 +22,18 @@ jobs:
       #
       # That same config's uv.lock extra-files entry assumes uv.lock keeps its
       # current TOML shape: a [[package]] array of tables, each with a `name` and
-      # sibling `version` field. If a future uv release changes that lockfile
-      # format, the jsonpath `$.package[?(@.name=='pulumi-reolink')].version` will
-      # stop matching -- release-please only logs a warning and leaves uv.lock
-      # unmodified in that case, it does not fail the step. The first visible
+      # sibling `version` field. The jsonpath filters on `@.name.value`, not
+      # `@.name` -- release-please parses TOML with a custom position-preserving
+      # parser (TaggedTOMLParser) that wraps every scalar as {start, end, value}
+      # instead of a plain string, so a filter comparing `@.name` directly to a
+      # string silently never matches. Verified against the actual compiled
+      # updater (release-please's GenericToml class) run against this repo's
+      # real uv.lock, not just release-please's public docs, since that's what
+      # exposed the bug in the first place. If a future uv release changes
+      # uv.lock's TOML shape, release-please only logs a warning and leaves the
+      # file unmodified rather than failing the step -- the first visible
       # symptom would be the next release's CI failing on `uv sync --locked`
-      # (the same failure this extra-files entry was added to prevent), which is
+      # (the same failure this extra-files entry exists to prevent), which is
       # the signal to come back and update this jsonpath.
       - uses: googleapis/release-please-action@v5.0.0
         id: release
