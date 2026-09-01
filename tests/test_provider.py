@@ -32,6 +32,12 @@ GETTER_CASES = {
     "audio_recording": "audio_record",
     "privacy_mask": "privacy_mask_enabled",
     "speaker_volume": "volume",
+    "zoom": "get_zoom",
+    "focus": "get_focus",
+    "doorbell_quick_reply_message": "quick_reply_file",
+    "doorbell_quick_reply_time": "quick_reply_time",
+    "doorbell_button_sound": "doorbell_button_sound",
+    "doorbell_led": "doorbell_led",
 }
 
 DEVICE_LEVEL_GETTER_CASES = {
@@ -185,6 +191,11 @@ async def test_apply_setting_ptz_guard_uses_enable_keyword() -> None:
         ("audio_recording", "set_audio", True, {}),
         ("privacy_mask", "set_privacy_mask", True, {}),
         ("speaker_volume", "set_volume", 50, {"volume": 50}),
+        ("zoom", "set_zoom", 10, {}),
+        ("focus", "set_focus", 100, {}),
+        ("doorbell_button_sound", "set_volume", True, {"doorbell_button_sound": True}),
+        ("doorbell_quick_reply_message", "set_quick_reply", 5, {"file_id": 5}),
+        ("doorbell_quick_reply_time", "set_quick_reply", 30, {"time": 30}),
     ],
 )
 async def test_apply_setting_forwards_new_settings_correctly(
@@ -226,6 +237,7 @@ async def test_apply_setting_device_level_alias_forwards_value_with_none_channel
         ("ai_animal_sensitivity", "dog_cat"),
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
+        ("ai_vehicle_sensitivity", "vehicle"),
     ],
 )
 async def test_apply_setting_ai_sensitivity_forwards_value_and_ai_type(
@@ -273,6 +285,18 @@ async def test_apply_setting_siren_on_event_forwards_value_positionally() -> Non
     await apply_setting(host, 1, "siren_on_event", True)
 
     host.set_audio_alarm.assert_awaited_once_with(1, True)
+
+
+async def test_apply_setting_doorbell_led_uses_doorbell_keyword() -> None:
+    """doorbell_led shares set_status_led() with status_led -- disambiguated
+    by the doorbell=True keyword -- so it needs its own test rather than
+    fitting the plain-positional or all-kwargs parametrized cases."""
+    host = MagicMock()
+    host.set_status_led = AsyncMock()
+
+    await apply_setting(host, 1, "doorbell_led", "Auto")
+
+    host.set_status_led.assert_awaited_once_with(1, "Auto", doorbell=True)
 
 
 def test_read_setting_reflection_fallback_uses_bare_getter() -> None:
@@ -430,6 +454,7 @@ def test_read_setting_treats_getter_sentinel_as_unsupported(
         ("ai_animal_sensitivity", "dog_cat"),
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
+        ("ai_vehicle_sensitivity", "vehicle"),
     ],
 )
 def test_read_setting_ai_sensitivity_calls_getter_with_ai_type(alias: str, ai_type: str) -> None:
@@ -447,6 +472,7 @@ def test_read_setting_ai_sensitivity_calls_getter_with_ai_type(alias: str, ai_ty
         ("ai_animal_sensitivity", "dog_cat"),
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
+        ("ai_vehicle_sensitivity", "vehicle"),
     ],
 )
 def test_read_setting_ai_sensitivity_treats_zero_as_unsupported(alias: str, ai_type: str) -> None:

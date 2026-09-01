@@ -155,11 +155,18 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
         "dog_cat": 35,
         "people": 45,
         "cry": 50,
+        "vehicle": 40,
     }[ai_type]
     host.auto_track_enabled.return_value = True
     host.ptz_guard_time.return_value = 30
     host.baichuan.privacy_mode.return_value = False
     host.audio_alarm_enabled.return_value = False
+    host.get_zoom.return_value = 10
+    host.get_focus.return_value = 100
+    host.quick_reply_file.return_value = -1
+    host.quick_reply_time.return_value = 30
+    host.doorbell_button_sound.return_value = True
+    host.doorbell_led.return_value = "Auto"
     return host
 
 
