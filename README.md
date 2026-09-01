@@ -141,6 +141,13 @@ A stable set of built-in names, plus best-effort support for others via runtime 
 - `guard_return_time`
 - `privacy_mode`
 - `siren_on_event`
+- `zoom`
+- `focus`
+- `ai_vehicle_sensitivity`
+- `doorbell_quick_reply_message` (audio file id to auto-play on a visitor press; `-1` turns it off)
+- `doorbell_quick_reply_time`
+- `doorbell_button_sound`
+- `doorbell_led`
 
 **Is this affiliated with or endorsed by Reolink?**
 No — this is an independent, community project built on Reolink's local HTTP API, not an official Reolink product.

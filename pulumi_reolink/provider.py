@@ -171,6 +171,13 @@ CAPABILITY_BY_ALIAS: dict[str, str] = {
     "guard_return_time": "ptz_guard",
     "privacy_mode": "privacy_mode",
     "siren_on_event": "siren",
+    "zoom": "zoom",
+    "focus": "focus",
+    "ai_vehicle_sensitivity": "ai_vehicle",
+    "doorbell_quick_reply_message": "quick_reply",
+    "doorbell_quick_reply_time": "quick_reply",
+    "doorbell_button_sound": "doorbell_button_sound",
+    "doorbell_led": "doorbell_led",
 }
 
 
@@ -297,6 +304,63 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
             lambda host, channel: host.audio_alarm_enabled(channel),
         ),
         set=lambda host, channel, value: host.set_audio_alarm(channel, value),
+    ),
+    "zoom": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["zoom"], lambda host, channel: host.get_zoom(channel)
+        ),
+        set=lambda host, channel, value: host.set_zoom(channel, value),
+    ),
+    "focus": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["focus"], lambda host, channel: host.get_focus(channel)
+        ),
+        set=lambda host, channel, value: host.set_focus(channel, value),
+    ),
+    "ai_vehicle_sensitivity": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_vehicle_sensitivity"], _ai_sensitivity_getter("vehicle")
+        ),
+        set=lambda host, channel, value: host.set_ai_sensitivity(channel, value, ai_type="vehicle"),
+    ),
+    # doorbell_quick_reply_message and doorbell_quick_reply_time are two
+    # separate settings (which file to play, and its auto-reply timeout)
+    # that both live behind the same "quick_reply" capability flag on the
+    # camera -- there's no finer-grained capability to check per-field.
+    #
+    # HA's "Auto quick reply message" select doubles as the on/off toggle:
+    # set_quick_reply's file_id doubles as enable when passed alone -- >= 0
+    # turns the feature on with that file, -1 (the "off" entry in
+    # quick_reply_dict) turns it off. There is no separate boolean to set.
+    "doorbell_quick_reply_message": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["doorbell_quick_reply_message"],
+            lambda host, channel: host.quick_reply_file(channel),
+        ),
+        set=lambda host, channel, value: host.set_quick_reply(channel, file_id=value),
+    ),
+    "doorbell_quick_reply_time": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["doorbell_quick_reply_time"],
+            lambda host, channel: host.quick_reply_time(channel),
+        ),
+        set=lambda host, channel, value: host.set_quick_reply(channel, time=value),
+    ),
+    "doorbell_button_sound": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["doorbell_button_sound"],
+            lambda host, channel: host.doorbell_button_sound(channel),
+        ),
+        set=lambda host, channel, value: host.set_volume(channel, doorbell_button_sound=value),
+    ),
+    # doorbell_led is a distinct LED from status_led -- reolink-aio reuses
+    # set_status_led() for both, disambiguated by the doorbell=True keyword
+    # (see set_status_led's "powerLed == statusLed = doorbell_led" comment).
+    "doorbell_led": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["doorbell_led"], lambda host, channel: host.doorbell_led(channel)
+        ),
+        set=lambda host, channel, value: host.set_status_led(channel, value, doorbell=True),
     ),
 }
 
