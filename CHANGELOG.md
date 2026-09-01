@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.2.1...pulumi-reolink-v0.3.0) (2026-09-01)
+
+
+### Features
+
+* support zoom, focus, AI vehicle, and doorbell settings ([ec51b49](https://github.com/menil/pulumi-reolink/commit/ec51b49ee262da794045f25135894c0fcbaafeaa))
+
+
+### Bug Fixes
+
+* correct uv.lock jsonpath filter, resync lockfile ([93a20f9](https://github.com/menil/pulumi-reolink/commit/93a20f9e519d75926a54705b57613600592d7846))
+
 ## [0.2.1](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.2.0...pulumi-reolink-v0.2.1) (2026-09-01)
 
 
