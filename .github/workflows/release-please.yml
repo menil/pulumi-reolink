@@ -12,4 +12,8 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # release-please-config.json intentionally omits bump-patch-for-minor-pre-major:
+      # that flag demotes feat: commits to patch bumps while pre-1.0, which is the
+      # opposite of what we want. bump-minor-pre-major alone still caps breaking
+      # changes at a minor bump instead of jumping straight to 1.0.0.
       - uses: googleapis/release-please-action@v5.0.0
