@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pulumi-reolink"
-version = "0.2.0"
+version = "0.2.1"
 description = "A reusable Pulumi package and CLI utility to configure and back up Reolink camera settings locally, without depending on Home Assistant."
 readme = "README.md"
 license = "MIT"

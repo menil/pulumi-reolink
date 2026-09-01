@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.2.0...pulumi-reolink-v0.2.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* sync uv.lock on release, publish within the same workflow run ([40fe78b](https://github.com/menil/pulumi-reolink/commit/40fe78b95c3b0b4f5d462f9dd5224e309777571e))
+
 ## [0.2.0](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.1.0...pulumi-reolink-v0.2.0) (2026-09-01)
 
 
