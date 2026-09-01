@@ -9,7 +9,7 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='pulumi-reolink')].version"
+          "jsonpath": "$.package[?(@.name.value=='pulumi-reolink')].version"
         }
       ]
     }
