@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.0...pulumi-reolink-v0.3.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* restrict CI workflow GITHUB_TOKEN to read-only ([afbcb7e](https://github.com/menil/pulumi-reolink/commit/afbcb7e4c3448e4136902c2b176859ee19a25910))
+
 ## [0.3.0](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.2.1...pulumi-reolink-v0.3.0) (2026-09-01)
 
 
