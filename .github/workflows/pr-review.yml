@@ -19,10 +19,9 @@ jobs:
       - name: Run PR Review Action
         uses: menil/pr-code-review-action@main
         with:
-          # Auto-selects anthropic (preferring the Claude Code subscription token over a
-          # billed API key when both are set) if either Anthropic secret is configured,
-          # otherwise falls back to OpenRouter.
-          provider: ${{ (secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_CODE_OAUTH_TOKEN) && 'anthropic' || 'openrouter' }}
+          # Automatically tries Claude first (preferring Claude Code OAuth token over billed API key)
+          # and falls back to OpenRouter on token errors, credit depletion, or 5xx server errors.
+          provider: 'auto'
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
           openrouter_model: ${{ vars.OPENROUTER_MODEL || 'openrouter/free' }}
           openrouter_base_url: ${{ vars.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1/chat/completions' }}

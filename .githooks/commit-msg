@@ -54,8 +54,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     exit 1
   fi
 
-  # Validate body lines (line 3 onwards)
+  # Validate body lines (line 3 onwards, URLs/trailers with URLs exempt)
   if [ "$LINE_NUM" -ge 3 ]; then
+    case "$line" in
+    *http://* | *https://*)
+      LINE_NUM=$((LINE_NUM + 1))
+      continue
+      ;;
+    esac
     LEN=${#line}
     if [ "$LEN" -gt 72 ]; then
       printf 'ERROR: Commit body line %s exceeds 72 characters (%s chars): "%s"\n' "$LINE_NUM" "$LEN" "$line" >&2
