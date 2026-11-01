@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.1...pulumi-reolink-v0.3.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* **ci:** use auto provider for automated fallback in PR review workflow ([3d295da](https://github.com/menil/pulumi-reolink/commit/3d295da1473d237ac76874474150e5fb6131f65d))
+
 ## [0.3.1](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.0...pulumi-reolink-v0.3.1) (2026-09-13)
 
 
