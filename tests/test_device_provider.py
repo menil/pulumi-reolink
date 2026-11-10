@@ -2,9 +2,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pulumi
+import pytest
 from pulumi.runtime import mocks
 
-from pulumi_reolink.provider import ReolinkDevice, _ReolinkDeviceProvider, _resource_id
+from pulumi_reolink.provider import ReolinkDevice, _connect, _ReolinkDeviceProvider, _resource_id
 
 BASE_PROPS = {
     "host": "10.0.0.5",
@@ -45,11 +46,25 @@ def test_create_applies_settings_logs_in_and_out(mock_host_cls: MagicMock) -> No
 
     host.login.assert_awaited_once()
     host.get_host_data.assert_awaited_once()
+    assert host.get_states.await_count == 2
     host.set_status_led.assert_awaited_once_with(0, False)
     host.logout.assert_awaited_once()
     assert result.id == "10.0.0.5:default"
     assert result.outs is not None
     assert result.outs["settings"] == {"status_led": True}
+
+
+@patch("pulumi_reolink.provider.Host")
+def test_create_without_settings_only_queries_initial_states(mock_host_cls: MagicMock) -> None:
+    host = _fake_host()
+    mock_host_cls.return_value = host
+
+    provider = _ReolinkDeviceProvider()
+    result = provider.create({**BASE_PROPS, "settings": {}})
+
+    host.get_states.assert_awaited_once()
+    assert result.outs is not None
+    assert result.outs["settings"] == {}
 
 
 @patch("pulumi_reolink.provider.Host")
@@ -79,8 +94,55 @@ def test_update_only_applies_changed_settings(mock_host_cls: MagicMock) -> None:
 
     host.set_ir_lights.assert_awaited_once_with(0, True)
     host.set_status_led.assert_not_awaited()
+    assert host.get_states.await_count == 2
     assert result.outs is not None
     assert result.outs["settings"] == {"status_led": True, "ir_lights": True}
+
+
+@patch("pulumi_reolink.provider.Host")
+def test_update_without_changes_only_queries_initial_states(mock_host_cls: MagicMock) -> None:
+    host = _fake_host()
+    mock_host_cls.return_value = host
+
+    provider = _ReolinkDeviceProvider()
+    result = provider.update(
+        "10.0.0.5:default",
+        {**BASE_PROPS, "settings": {"status_led": True}},
+        {**BASE_PROPS, "settings": {"status_led": True}},
+    )
+
+    host.get_states.assert_awaited_once()
+    assert result.outs is not None
+    assert result.outs["settings"] == {"status_led": True}
+
+
+@patch("pulumi_reolink.provider.Host")
+async def test_connect_logs_out_on_get_host_data_error(mock_host_cls: MagicMock) -> None:
+    host = _fake_host()
+    host.get_host_data.side_effect = RuntimeError("network error")
+    mock_host_cls.return_value = host
+
+    with pytest.raises(RuntimeError, match="network error"):
+        await _connect("10.0.0.5", None, "admin", "secret")
+
+    host.login.assert_awaited_once()
+    host.get_host_data.assert_awaited_once()
+    host.logout.assert_awaited_once()
+
+
+@patch("pulumi_reolink.provider.Host")
+async def test_connect_logs_out_on_get_states_error(mock_host_cls: MagicMock) -> None:
+    host = _fake_host()
+    host.get_states.side_effect = RuntimeError("states failed")
+    mock_host_cls.return_value = host
+
+    with pytest.raises(RuntimeError, match="states failed"):
+        await _connect("10.0.0.5", None, "admin", "secret")
+
+    host.login.assert_awaited_once()
+    host.get_host_data.assert_awaited_once()
+    host.get_states.assert_awaited_once()
+    host.logout.assert_awaited_once()
 
 
 def test_delete_is_a_noop() -> None:

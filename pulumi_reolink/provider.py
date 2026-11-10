@@ -584,16 +584,24 @@ CHANNEL = 0
 async def _connect(host: str, port: int | None, username: str, password: str) -> Host:
     client = Host(host, username, password, port=port)
     await client.login()
-    # Discovers the camera's channels and capabilities. Without this,
-    # get_states() has no channels to iterate and every setting getter
-    # silently falls back to its default (False/0) instead of the real
-    # value, and every setter rejects the channel as unrecognized.
-    await client.get_host_data()
+    try:
+        # Discovers the camera's channels and capabilities. Without this,
+        # get_states() has no channels to iterate and every setting getter
+        # silently falls back to its default (False/0) instead of the real
+        # value, and every setter rejects the channel as unrecognized.
+        await client.get_host_data()
+        # Fetches initial device states (AI alarm settings, night modes, etc.).
+        # Many reolink-aio setters (such as set_ai_sensitivity, set_ai_delay)
+        # validate channel presence in cached state dicts and raise NotSupportedError
+        # if get_states() has not been called prior to applying settings.
+        await client.get_states()
+    except Exception:
+        await client.logout()
+        raise
     return client
 
 
-async def _read_settings(client: Host, keys: list[str]) -> dict[str, Any]:
-    await client.get_states()
+def _read_settings(client: Host, keys: list[str]) -> dict[str, Any]:
     return {key: read_setting(client, CHANNEL, key) for key in keys}
 
 
@@ -615,7 +623,9 @@ class _ReolinkDeviceProvider(dynamic.ResourceProvider):
             try:
                 settings = props.get("settings") or {}
                 await _apply_settings(client, settings)
-                return await _read_settings(client, list(settings))
+                if settings:
+                    await client.get_states()
+                return _read_settings(client, list(settings))
             finally:
                 await client.logout()
 
@@ -646,7 +656,9 @@ class _ReolinkDeviceProvider(dynamic.ResourceProvider):
                     if old_settings.get(key) != value
                 }
                 await _apply_settings(client, changed_settings)
-                return await _read_settings(client, list(new_settings))
+                if changed_settings:
+                    await client.get_states()
+                return _read_settings(client, list(new_settings))
             finally:
                 await client.logout()
 
@@ -659,7 +671,7 @@ class _ReolinkDeviceProvider(dynamic.ResourceProvider):
                 props["host"], props.get("port"), props["username"], props["password"]
             )
             try:
-                return await _read_settings(client, list(props.get("settings") or {}))
+                return _read_settings(client, list(props.get("settings") or {}))
             finally:
                 await client.logout()
 
