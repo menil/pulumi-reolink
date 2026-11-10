@@ -119,6 +119,31 @@ def _ai_sensitivity_getter(ai_type: str) -> Getter:
     return get
 
 
+def _ai_delay_getter(ai_type: str) -> Getter:
+    """Build a getter for one AI detection type's stay/delay time.
+
+    ai_delay(channel, ai_type) returns 0 when the channel hasn't reported
+    that ai_type's settings yet, or when the stay time is legitimately 0
+    seconds. We check the specific AI type capability (e.g. 'ai_people',
+    'ai_vehicle', 'ai_dog_cat') and verify that settings have been reported
+    on this channel before reading the delay.
+    """
+
+    def get(host: Host, channel: int) -> Any:
+        if not host.supported(channel, f"ai_{ai_type}"):
+            raise UnsupportedSettingError(
+                f"AI '{ai_type}' is not supported by this camera on channel {channel}."
+            )
+        ai_settings = getattr(host, "_ai_alarm_settings", {})
+        if channel not in ai_settings or ai_type not in ai_settings[channel]:
+            raise UnsupportedSettingError(
+                f"AI '{ai_type}' delay has not been reported by this camera on channel {channel}."
+            )
+        return host.ai_delay(channel, ai_type)
+
+    return get
+
+
 def _capability_checked_getter(capability: str, getter: Getter) -> Getter:
     """Wrap `getter` so it raises UnsupportedSettingError unless the camera
     reports `capability` as supported.
@@ -178,6 +203,18 @@ CAPABILITY_BY_ALIAS: dict[str, str] = {
     "doorbell_quick_reply_time": "quick_reply",
     "doorbell_button_sound": "doorbell_button_sound",
     "doorbell_led": "doorbell_led",
+    "ai_package_sensitivity": "ai_package",
+    "ai_person_delay": "ai_delay",
+    "ai_vehicle_delay": "ai_delay",
+    "ai_animal_delay": "ai_delay",
+    "daynight_threshold": "dayNightThreshold",
+    "backlight_mode": "backLight",
+    "post_recording_time": "post_rec_time",
+    "spotlight_state": "floodLight",
+    "spotlight_mode": "floodLight",
+    "spotlight_brightness": "floodLight",
+    "auto_track_disappear_time": "auto_track_disappear_time",
+    "auto_track_stop_time": "auto_track_stop_time",
 }
 
 
@@ -361,6 +398,88 @@ SETTING_ALIASES: dict[str, SettingAlias] = {
             CAPABILITY_BY_ALIAS["doorbell_led"], lambda host, channel: host.doorbell_led(channel)
         ),
         set=lambda host, channel, value: host.set_status_led(channel, value, doorbell=True),
+    ),
+    "ai_package_sensitivity": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_package_sensitivity"], _ai_sensitivity_getter("package")
+        ),
+        set=lambda host, channel, value: host.set_ai_sensitivity(channel, value, ai_type="package"),
+    ),
+    "ai_person_delay": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_person_delay"], _ai_delay_getter("people")
+        ),
+        set=lambda host, channel, value: host.set_ai_delay(channel, value, ai_type="people"),
+    ),
+    "ai_vehicle_delay": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_vehicle_delay"], _ai_delay_getter("vehicle")
+        ),
+        set=lambda host, channel, value: host.set_ai_delay(channel, value, ai_type="vehicle"),
+    ),
+    "ai_animal_delay": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["ai_animal_delay"], _ai_delay_getter("dog_cat")
+        ),
+        set=lambda host, channel, value: host.set_ai_delay(channel, value, ai_type="dog_cat"),
+    ),
+    "daynight_threshold": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["daynight_threshold"],
+            _sentinel_guarded_getter("daynight_threshold", None, "Day/night threshold"),
+        ),
+        set=lambda host, channel, value: host.set_daynight_threshold(channel, value),
+    ),
+    "backlight_mode": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["backlight_mode"],
+            _sentinel_guarded_getter("backlight_state", None, "Backlight mode"),
+        ),
+        set=lambda host, channel, value: host.set_backlight(channel, value),
+    ),
+    "post_recording_time": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["post_recording_time"],
+            _sentinel_guarded_getter("post_recording_time", "", "Post-recording time"),
+        ),
+        set=lambda host, channel, value: host.set_post_recording_time(channel, value),
+    ),
+    "spotlight_state": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["spotlight_state"],
+            lambda host, channel: host.whiteled_state(channel),
+        ),
+        set=lambda host, channel, value: host.set_whiteled(channel, state=value),
+    ),
+    "spotlight_mode": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["spotlight_mode"],
+            _sentinel_guarded_getter("whiteled_mode", None, "Spotlight mode"),
+        ),
+        set=lambda host, channel, value: host.set_whiteled(channel, mode=value),
+    ),
+    "spotlight_brightness": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["spotlight_brightness"],
+            _sentinel_guarded_getter("whiteled_brightness", None, "Spotlight brightness"),
+        ),
+        set=lambda host, channel, value: host.set_whiteled(channel, brightness=value),
+    ),
+    "auto_track_disappear_time": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["auto_track_disappear_time"],
+            _sentinel_guarded_getter(
+                "auto_track_disappear_time", -1, "Auto-tracking disappear time"
+            ),
+        ),
+        set=lambda host, channel, value: host.set_auto_tracking(channel, disappear_time=value),
+    ),
+    "auto_track_stop_time": SettingAlias(
+        get=_capability_checked_getter(
+            CAPABILITY_BY_ALIAS["auto_track_stop_time"],
+            _sentinel_guarded_getter("auto_track_stop_time", -1, "Auto-tracking stop time"),
+        ),
+        set=lambda host, channel, value: host.set_auto_tracking(channel, stop_time=value),
     ),
 }
 

@@ -38,6 +38,14 @@ GETTER_CASES = {
     "doorbell_quick_reply_time": "quick_reply_time",
     "doorbell_button_sound": "doorbell_button_sound",
     "doorbell_led": "doorbell_led",
+    "daynight_threshold": "daynight_threshold",
+    "backlight_mode": "backlight_state",
+    "post_recording_time": "post_recording_time",
+    "spotlight_state": "whiteled_state",
+    "spotlight_mode": "whiteled_mode",
+    "spotlight_brightness": "whiteled_brightness",
+    "auto_track_disappear_time": "auto_track_disappear_time",
+    "auto_track_stop_time": "auto_track_stop_time",
 }
 
 DEVICE_LEVEL_GETTER_CASES = {
@@ -196,6 +204,14 @@ async def test_apply_setting_ptz_guard_uses_enable_keyword() -> None:
         ("doorbell_button_sound", "set_volume", True, {"doorbell_button_sound": True}),
         ("doorbell_quick_reply_message", "set_quick_reply", 5, {"file_id": 5}),
         ("doorbell_quick_reply_time", "set_quick_reply", 30, {"time": 30}),
+        ("daynight_threshold", "set_daynight_threshold", 50, {}),
+        ("backlight_mode", "set_backlight", "Off", {}),
+        ("post_recording_time", "set_post_recording_time", "15 Seconds", {}),
+        ("spotlight_state", "set_whiteled", True, {"state": True}),
+        ("spotlight_mode", "set_whiteled", 1, {"mode": 1}),
+        ("spotlight_brightness", "set_whiteled", 80, {"brightness": 80}),
+        ("auto_track_disappear_time", "set_auto_tracking", 10, {"disappear_time": 10}),
+        ("auto_track_stop_time", "set_auto_tracking", 20, {"stop_time": 20}),
     ],
 )
 async def test_apply_setting_forwards_new_settings_correctly(
@@ -238,6 +254,7 @@ async def test_apply_setting_device_level_alias_forwards_value_with_none_channel
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
         ("ai_vehicle_sensitivity", "vehicle"),
+        ("ai_package_sensitivity", "package"),
     ],
 )
 async def test_apply_setting_ai_sensitivity_forwards_value_and_ai_type(
@@ -249,6 +266,23 @@ async def test_apply_setting_ai_sensitivity_forwards_value_and_ai_type(
     await apply_setting(host, 1, alias, 60)
 
     host.set_ai_sensitivity.assert_awaited_once_with(1, 60, ai_type=ai_type)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_person_delay", "people"),
+        ("ai_vehicle_delay", "vehicle"),
+        ("ai_animal_delay", "dog_cat"),
+    ],
+)
+async def test_apply_setting_ai_delay_forwards_value_and_ai_type(alias: str, ai_type: str) -> None:
+    host = MagicMock()
+    host.set_ai_delay = AsyncMock()
+
+    await apply_setting(host, 1, alias, 4)
+
+    host.set_ai_delay.assert_awaited_once_with(1, 4, ai_type=ai_type)
 
 
 async def test_apply_setting_auto_tracking_uses_enable_keyword() -> None:
@@ -430,6 +464,13 @@ def test_read_setting_wraps_non_reolink_error() -> None:
         ("motion_sensitivity", "md_sensitivity", 0, 25),
         ("hdr", "HDR_state", -1, 2),
         ("daynight_mode", "daynight_state", None, "Auto"),
+        ("daynight_threshold", "daynight_threshold", None, 50),
+        ("backlight_mode", "backlight_state", None, "Off"),
+        ("post_recording_time", "post_recording_time", "", "15 Seconds"),
+        ("spotlight_mode", "whiteled_mode", None, 1),
+        ("spotlight_brightness", "whiteled_brightness", None, 80),
+        ("auto_track_disappear_time", "auto_track_disappear_time", -1, 10),
+        ("auto_track_stop_time", "auto_track_stop_time", -1, 20),
     ],
 )
 def test_read_setting_treats_getter_sentinel_as_unsupported(
@@ -455,6 +496,7 @@ def test_read_setting_treats_getter_sentinel_as_unsupported(
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
         ("ai_vehicle_sensitivity", "vehicle"),
+        ("ai_package_sensitivity", "package"),
     ],
 )
 def test_read_setting_ai_sensitivity_calls_getter_with_ai_type(alias: str, ai_type: str) -> None:
@@ -473,6 +515,7 @@ def test_read_setting_ai_sensitivity_calls_getter_with_ai_type(alias: str, ai_ty
         ("ai_person_sensitivity", "people"),
         ("baby_cry_sensitivity", "cry"),
         ("ai_vehicle_sensitivity", "vehicle"),
+        ("ai_package_sensitivity", "package"),
     ],
 )
 def test_read_setting_ai_sensitivity_treats_zero_as_unsupported(alias: str, ai_type: str) -> None:
@@ -484,6 +527,58 @@ def test_read_setting_ai_sensitivity_treats_zero_as_unsupported(alias: str, ai_t
     host.ai_sensitivity.return_value = 0
 
     with pytest.raises(UnsupportedSettingError):
+        read_setting(host, 0, alias)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_person_delay", "people"),
+        ("ai_vehicle_delay", "vehicle"),
+        ("ai_animal_delay", "dog_cat"),
+    ],
+)
+def test_read_setting_ai_delay_calls_getter_with_ai_type(alias: str, ai_type: str) -> None:
+    host = MagicMock()
+    host.supported.return_value = True
+    host._ai_alarm_settings = {3: {ai_type: {"stay_time": 4}}}
+    host.ai_delay.return_value = 4
+
+    assert read_setting(host, 3, alias) == 4
+
+    host.ai_delay.assert_called_once_with(3, ai_type)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_person_delay", "people"),
+        ("ai_vehicle_delay", "vehicle"),
+        ("ai_animal_delay", "dog_cat"),
+    ],
+)
+def test_read_setting_ai_delay_raises_when_ai_type_not_supported(alias: str, ai_type: str) -> None:
+    host = MagicMock()
+    host.supported.side_effect = lambda _channel, cap: cap == "ai_delay"
+
+    with pytest.raises(UnsupportedSettingError, match=f"AI '{ai_type}' is not supported"):
+        read_setting(host, 0, alias)
+
+
+@pytest.mark.parametrize(
+    ("alias", "ai_type"),
+    [
+        ("ai_person_delay", "people"),
+        ("ai_vehicle_delay", "vehicle"),
+        ("ai_animal_delay", "dog_cat"),
+    ],
+)
+def test_read_setting_ai_delay_raises_when_unreported(alias: str, ai_type: str) -> None:
+    host = MagicMock()
+    host.supported.return_value = True
+    host._ai_alarm_settings = {}
+
+    with pytest.raises(UnsupportedSettingError, match="has not been reported"):
         read_setting(host, 0, alias)
 
 
