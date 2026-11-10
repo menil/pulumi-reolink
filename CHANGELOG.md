@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.2...pulumi-reolink-v0.4.0) (2026-11-10)
+
+
+### Features
+
+* support spotlight, AI delay, ISP, and auto-tracking settings ([2c060ca](https://github.com/menil/pulumi-reolink/commit/2c060caf2de2582167598b9ee70ed1103d3781fd))
+
 ## [0.3.2](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.1...pulumi-reolink-v0.3.2) (2026-11-01)
 
 
