@@ -156,7 +156,20 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
         "people": 45,
         "cry": 50,
         "vehicle": 40,
+        "package": 30,
     }[ai_type]
+    host.ai_delay.side_effect = lambda _channel, ai_type: {
+        "people": 2,
+        "vehicle": 1,
+        "dog_cat": 3,
+    }[ai_type]
+    host._ai_alarm_settings = {
+        0: {
+            "people": {"stay_time": 2},
+            "vehicle": {"stay_time": 1},
+            "dog_cat": {"stay_time": 3},
+        }
+    }
     host.auto_track_enabled.return_value = True
     host.ptz_guard_time.return_value = 30
     host.baichuan.privacy_mode.return_value = False
@@ -167,6 +180,14 @@ def _fake_host(camera_name: str = "Front Doorbell") -> MagicMock:
     host.quick_reply_time.return_value = 30
     host.doorbell_button_sound.return_value = True
     host.doorbell_led.return_value = "Auto"
+    host.daynight_threshold.return_value = 50
+    host.backlight_state.return_value = "Off"
+    host.post_recording_time.return_value = "15 Seconds"
+    host.whiteled_state.return_value = True
+    host.whiteled_mode.return_value = 1
+    host.whiteled_brightness.return_value = 80
+    host.auto_track_disappear_time.return_value = 10
+    host.auto_track_stop_time.return_value = 20
     return host
 
 

@@ -148,6 +148,18 @@ A stable set of built-in names, plus best-effort support for others via runtime 
 - `doorbell_quick_reply_time`
 - `doorbell_button_sound`
 - `doorbell_led`
+- `ai_package_sensitivity`
+- `ai_person_delay`
+- `ai_vehicle_delay`
+- `ai_animal_delay`
+- `daynight_threshold`
+- `backlight_mode`
+- `post_recording_time`
+- `spotlight_state`
+- `spotlight_mode`
+- `spotlight_brightness`
+- `auto_track_disappear_time`
+- `auto_track_stop_time`
 
 **Is this affiliated with or endorsed by Reolink?**
 No — this is an independent, community project built on Reolink's local HTTP API, not an official Reolink product.
