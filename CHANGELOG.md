@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.4.0...pulumi-reolink-v0.4.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* populate camera states on provider connect ([3245b22](https://github.com/menil/pulumi-reolink/commit/3245b22afa4e8c8ede86b9af41149b6a58565912))
+
 ## [0.4.0](https://github.com/menil/pulumi-reolink/compare/pulumi-reolink-v0.3.2...pulumi-reolink-v0.4.0) (2026-11-10)
 
 
