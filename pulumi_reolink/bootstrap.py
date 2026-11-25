@@ -12,7 +12,13 @@ import pwinput  # type: ignore[import-untyped]
 import yaml  # type: ignore[import-untyped]
 from reolink_aio.api import Host
 
-from .provider import CHANNEL, SETTING_ALIASES, UnsupportedSettingError, read_setting
+from .provider import (
+    CHANNEL,
+    SETTING_ALIASES,
+    UnsupportedSettingError,
+    read_setting,
+    redact_secrets,
+)
 
 DEFAULT_CAMERAS_FILE = Path("cameras.yaml")
 # reolink-aio defaults to a 30s *per-request* timeout, and when port/https
@@ -152,7 +158,10 @@ def run_bootstrap(
             )
         )
     except Exception as exc:
-        print(f"\nCould not connect to {connection['host']}: {type(exc).__name__}: {exc}")
+        print(
+            f"\nCould not connect to {connection['host']}: "
+            f"{type(exc).__name__}: {redact_secrets(str(exc))}"
+        )
         print("Check the host/IP, username, and password, then try again.")
         sys.exit(1)
 

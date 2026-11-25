@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -524,6 +525,18 @@ def _resolve_alias(host: Host, key: str) -> SettingAlias:
     return SettingAlias(get=reflected_get, set=reflected_set)
 
 
+_SECRET_QUERY_PARAM = re.compile(r"\b(token|password|passwd|pass)=[^&\s'\"]*", re.IGNORECASE)
+
+
+def redact_secrets(text: str) -> str:
+    """Mask the value of token/password query parameters in `text`.
+
+    reolink-aio and aiohttp errors can embed the full request URL, which
+    carries the session token or credentials in its query string.
+    """
+    return _SECRET_QUERY_PARAM.sub(lambda m: f"{m.group(1)}=***", text)
+
+
 def read_setting(host: Host, channel: int, key: str) -> Any:
     """Read the current value of `key` from an already-refreshed `host`.
 
@@ -541,7 +554,8 @@ def read_setting(host: Host, channel: int, key: str) -> Any:
         raise
     except Exception as exc:
         raise UnsupportedSettingError(
-            f"Could not read setting '{key}' from the camera: {type(exc).__name__}: {exc}"
+            f"Could not read setting '{key}' from the camera: "
+            f"{type(exc).__name__}: {redact_secrets(str(exc))}"
         ) from exc
 
 
@@ -571,7 +585,7 @@ async def apply_setting(host: Host, channel: int, key: str, value: Any) -> None:
         await alias.set(host, channel, value)
     except Exception as exc:
         raise UnsupportedSettingError(
-            f"Could not apply setting '{key}': {type(exc).__name__}: {exc}"
+            f"Could not apply setting '{key}': {type(exc).__name__}: {redact_secrets(str(exc))}"
         ) from exc
 
 

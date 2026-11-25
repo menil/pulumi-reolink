@@ -8,6 +8,7 @@ from pulumi_reolink.provider import (
     UnsupportedSettingError,
     apply_setting,
     read_setting,
+    redact_secrets,
 )
 
 # push_notifications/recording/ftp_recording/email_notifications/buzzer are
@@ -456,6 +457,39 @@ def test_read_setting_wraps_non_reolink_error() -> None:
 
     with pytest.raises(UnsupportedSettingError, match="KeyError"):
         read_setting(host, 0, "status_led")
+
+
+def test_redact_secrets_masks_query_string_credentials() -> None:
+    text = "GET http://cam/cgi-bin/api.cgi?cmd=Get&token=abc123&user=admin&Password=hunter2&pass=x&passwd=y"
+
+    redacted = redact_secrets(text)
+
+    for secret in ("abc123", "hunter2", "=x", "=y"):
+        assert secret not in redacted
+    assert "user=admin" in redacted
+    assert "token=***" in redacted
+
+
+def test_read_setting_redacts_secrets_in_error() -> None:
+    host = MagicMock()
+    host.status_led_enabled.side_effect = RuntimeError("failed: http://cam/?token=abc123")
+
+    with pytest.raises(UnsupportedSettingError) as exc_info:
+        read_setting(host, 0, "status_led")
+
+    assert "abc123" not in str(exc_info.value)
+
+
+async def test_apply_setting_redacts_secrets_in_error() -> None:
+    host = MagicMock()
+    host.set_status_led = AsyncMock(
+        side_effect=RuntimeError("failed: http://cam/?password=hunter2")
+    )
+
+    with pytest.raises(UnsupportedSettingError) as exc_info:
+        await apply_setting(host, 0, "status_led", True)
+
+    assert "hunter2" not in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
