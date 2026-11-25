@@ -15,6 +15,14 @@ pkgs.mkShell {
     pulumiPackages.pulumi-python
   ];
 
+  # uv installs prebuilt Linux wheels (grpcio, which Pulumi's Python SDK needs) that look for
+  # the C++ runtime in the system library path, and a Nix shell does not see that path, so
+  # importing them fails with "libstdc++.so.6: cannot open shared object file". Point the
+  # loader at Nix's own copy. Only Linux needs it: macOS wheels do not use libstdc++ this way.
+  LD_LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isLinux (
+    pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]
+  );
+
   shellHook = ''
     echo "❄️ Welcome to the pulumi-reolink shell!"
     uv sync
